@@ -474,7 +474,6 @@
 
 
 &uart2 {
-    compatible = "ti,omap2-uart-legacy";
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart2_pins>;
