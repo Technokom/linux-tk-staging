@@ -147,7 +147,7 @@
     };
 
     eeprommcp: eeprommcp@57 {
-        compatible = "at,24c01";
+        compatible = "atmel,24c01";
         reg = <0x57>;
         read-only;
         pagesize = <8>;
