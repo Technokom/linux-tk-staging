@@ -730,7 +730,7 @@
 };
 
 &uart2 {
-    compatible = "ti,omap2-uart-legacy";
+    compatible = "ti,omap4-uart";
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart2_pins>;
@@ -741,7 +741,7 @@
 };
 
 &uart3 {
-    compatible = "ti,omap2-uart-legacy";
+    compatible = "ti,omap4-uart";
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart3_pins>;
@@ -752,7 +752,7 @@
 };
 
 &uart5 {
-    compatible = "ti,omap2-uart-legacy";
+    compatible = "ti,omap4-uart";
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart5_pins>;
@@ -783,3 +783,6 @@
 	status = "disable";
 };
 
+&sgx {
+	status = "okay";
+};
