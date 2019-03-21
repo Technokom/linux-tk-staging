@@ -494,8 +494,8 @@
 		sd-amp-gpios    = <&gpio5 13 GPIO_ACTIVE_HIGH>;
         */
 	};
-    bq25890: bq25890@6b {
-        compatible = "ti,bq25890";
+    bq25892: bq25892@6b {
+        compatible = "ti,bq25892";
         reg = <0x6b>;
 		interrupt-parent = <&gpio5>;
 		interrupts = <9 IRQ_TYPE_LEVEL_HIGH>;

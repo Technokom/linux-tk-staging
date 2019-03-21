@@ -22,6 +22,7 @@
 #include <linux/types.h>
 #include <linux/gpio/consumer.h>
 #include <linux/interrupt.h>
+#include <linux/pm_runtime.h>
 #include <linux/delay.h>
 #include <linux/usb/phy.h>
 
@@ -32,6 +33,7 @@
 #define BQ25890_IRQ_PIN			"bq25890_irq"
 
 #define BQ25890_ID			3
+#define BQ25892_ID			0
 
 enum bq25890_fields {
 	F_EN_HIZ, F_EN_ILIM, F_IILIM,				     /* Reg00 */
@@ -104,6 +106,7 @@ struct bq25890_device {
 	struct bq25890_state state;
 
 	struct mutex lock; /* protect state data */
+	bool is_pmic_controller;
 };
 
 static const struct regmap_range bq25890_readonly_reg_ranges[] = {
@@ -278,6 +281,8 @@ struct bq25890_lookup {
 	const u32 *tbl;
 	u32 size;
 };
+
+static struct bq25890_device *bq25890;
 
 static const union {
 	struct bq25890_range  rt;
@@ -585,6 +590,12 @@ static int bq25890_chip_reset(struct bq25890_device *bq)
 	return 0;
 }
 
+static void power_off(void)
+{
+    bq25890_field_write(bq25890, F_BATFET_DIS, 1);
+    bq25890_field_write(bq25890, F_BATFET_DIS, 1);
+}
+
 static int bq25890_hw_init(struct bq25890_device *bq)
 {
 	int ret;
@@ -855,6 +866,12 @@ static int bq25890_probe(struct i2c_client *client,
 		return -ENODEV;
 	}
 
+    bq->is_pmic_controller = of_property_read_bool(bq->dev->of_node, "system-power-controller");
+    if (bq->is_pmic_controller) {
+        pm_power_off = power_off;
+        bq25890 = bq;
+    }
+
 	ret = bq25890_hw_init(bq);
 	if (ret < 0) {
 		dev_err(dev, "Cannot initialize the chip.\n");
@@ -960,12 +977,14 @@ static const struct dev_pm_ops bq25890_pm = {
 
 static const struct i2c_device_id bq25890_i2c_ids[] = {
 	{ "bq25890", 0 },
+	{ "bq25892", 0 },
 	{},
 };
 MODULE_DEVICE_TABLE(i2c, bq25890_i2c_ids);
 
 static const struct of_device_id bq25890_of_match[] = {
 	{ .compatible = "ti,bq25890", },
+	{ .compatible = "ti,bq25892", },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, bq25890_of_match);
