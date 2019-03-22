@@ -164,6 +164,9 @@ config USB_U_AUDIO
 config USB_F_SERIAL
 	tristate
 
+config USB_F_TK_SERIAL
+	tristate
+
 config USB_F_OBEX
 	tristate
 

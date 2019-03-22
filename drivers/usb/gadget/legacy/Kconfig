@@ -378,6 +378,17 @@ config USB_G_ACM_MS
 	  Say "y" to link the driver statically, or "m" to build a
 	  dynamically linked module called "g_acm_ms".
 
+config USB_G_MULTI_TK
+	tristate "Multifunction Composite TK Gadget"
+	depends on BLOCK && NET
+	select USB_LIBCOMPOSITE
+	select USB_U_SERIAL
+	select USB_F_TK_SERIAL
+	select USB_F_ACM
+	select USB_F_MASS_STORAGE
+	help
+		"Composite TK"
+
 config USB_G_MULTI
 	tristate "Multifunction Composite Gadget"
 	depends on BLOCK && NET

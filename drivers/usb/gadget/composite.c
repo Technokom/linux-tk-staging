@@ -1836,28 +1836,33 @@ unknown:
 			buf[5] = 0x01;
 			switch (ctrl->bRequestType & USB_RECIP_MASK) {
 			case USB_RECIP_DEVICE:
-				if (w_index != 0x4 || (w_value >> 8))
-					break;
-				buf[6] = w_index;
-				if (w_length == 0x10) {
-					/* Number of ext compat interfaces */
-					count = count_ext_compat(os_desc_cfg);
-					buf[8] = count;
-					count *= 24; /* 24 B/ext compat desc */
-					count += 16; /* header */
-					put_unaligned_le32(count, buf);
+	            if(w_index == 0 && w_value == 0 && w_length == 64) {
+					memcpy(buf, cdev->qw_sign, OS_STRING_QW_SIGN_LEN);
 					value = w_length;
 				} else {
-					/* "extended compatibility ID"s */
-					count = count_ext_compat(os_desc_cfg);
-					buf[8] = count;
-					count *= 24; /* 24 B/ext compat desc */
-					count += 16; /* header */
-					put_unaligned_le32(count, buf);
-					buf += 16;
-					value = fill_ext_compat(os_desc_cfg, buf);
-					value = min_t(u16, w_length, value);
-				}
+				    if (w_index != 0x4 || (w_value >> 8))
+					    break;
+				    buf[6] = w_index;
+				    if (w_length == 0x10) {
+					    /* Number of ext compat interfaces */
+					    count = count_ext_compat(os_desc_cfg);
+					    buf[8] = count;
+					    count *= 24; /* 24 B/ext compat desc */
+					    count += 16; /* header */
+					    put_unaligned_le32(count, buf);
+					    value = w_length;
+				    } else {
+					    /* "extended compatibility ID"s */
+					    count = count_ext_compat(os_desc_cfg);
+					    buf[8] = count;
+					    count *= 24; /* 24 B/ext compat desc */
+					    count += 16; /* header */
+					    put_unaligned_le32(count, buf);
+					    buf += 16;
+					    value = fill_ext_compat(os_desc_cfg, buf);
+					    value = min_t(u16, w_length, value);
+				    }
+                }
 				break;
 			case USB_RECIP_INTERFACE:
 				if (w_index != 0x5 || (w_value >> 8))
