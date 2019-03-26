@@ -1284,6 +1284,7 @@ static int __init early_omap_serial_setup(struct earlycon_device *device,
 }
 
 OF_EARLYCON_DECLARE(omapserial, "ti,omap2-uart", early_omap_serial_setup);
+OF_EARLYCON_DECLARE(omapserial, "ti,omap2-uart-legacy", early_omap_serial_setup);
 OF_EARLYCON_DECLARE(omapserial, "ti,omap3-uart", early_omap_serial_setup);
 OF_EARLYCON_DECLARE(omapserial, "ti,omap4-uart", early_omap_serial_setup);
 #endif /* CONFIG_SERIAL_EARLYCON */
@@ -1920,6 +1921,7 @@ static const struct dev_pm_ops serial_omap_dev_pm_ops = {
 
 #if defined(CONFIG_OF)
 static const struct of_device_id omap_serial_of_match[] = {
+	{ .compatible = "ti,omap2-uart-legacy" },
 	{ .compatible = "ti,omap2-uart" },
 	{ .compatible = "ti,omap3-uart" },
 	{ .compatible = "ti,omap4-uart" },
