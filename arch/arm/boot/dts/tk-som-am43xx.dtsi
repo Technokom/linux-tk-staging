@@ -16,6 +16,10 @@
 
 / {
 
+	aliases {
+		rtc0 = &mcp7940x;
+	};
+
 	evm_v3_3d: fixedregulator-v3_3d {
 		compatible = "regulator-fixed";
 		regulator-name = "evm_v3_3d";
@@ -142,7 +146,7 @@
 	clock-frequency = <400000>;
     
     mcp7940x: mcp7940x@6f {
-		compatible = "mcp7941x";
+        compatible = "microchip,mcp7941x";
 		reg = <0x6f>;
     };
 

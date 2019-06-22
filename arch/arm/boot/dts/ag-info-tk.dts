@@ -778,9 +778,7 @@
 
 
 &rtc {
-	clocks = <&clk_32k_rtc>, <&clk_32768_ck>;
-	clock-names = "ext-clk", "int-clk";
-	status = "disable";
+	status = "disabled";
 };
 
 &sgx {
