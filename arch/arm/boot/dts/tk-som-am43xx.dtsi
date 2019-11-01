@@ -168,7 +168,7 @@
 			compatible = "ti,tps65218-dcdc1";
 			regulator-name = "vdd_core";
 			regulator-min-microvolt = <912000>;
-			regulator-max-microvolt = <1144000>;
+			regulator-max-microvolt = <1149000>;
 			regulator-boot-on;
 			regulator-always-on;
 		};
@@ -177,7 +177,7 @@
 			compatible = "ti,tps65218-dcdc2";
 			regulator-name = "vdd_mpu";
 			regulator-min-microvolt = <912000>;
-			regulator-max-microvolt = <1378000>;
+			regulator-max-microvolt = <1383000>;
 			regulator-boot-on;
 			regulator-always-on;
 		};
