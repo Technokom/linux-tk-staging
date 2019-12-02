@@ -1,0 +1,767 @@
+
+/dts-v1/;
+
+#include "am4372.dtsi"
+#include "tk-som-am43xx.dtsi"
+#include <dt-bindings/pinctrl/am43xx.h>
+#include <dt-bindings/pwm/pwm.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+
+/ {
+
+	model = "TK SOM AM437x SUEK";
+	compatible = "technokom,suek","ti,am4378","ti,am43";
+
+	aliases {
+		display0 = &lcd0;
+	};
+
+
+	lcd_bl: backlight {
+		compatible = "pwm-backlight";
+		pwms = <&ecap0 0 50000 0>;
+		brightness-levels = <0 10 20 30 40 50 60 70 80 90 100 124 155 186 217 255>;
+		default-brightness-level = <15>;
+	};
+
+	lcd0: display {
+		compatible = "osddisplays,osd057T0559-34ts", "panel-dpi";
+		label = "lcd";
+		
+		pinctrl-names = "default";
+		pinctrl-0 = <&lvds_pin_shutdown>;
+		enable-gpios = <&gpio5 29 GPIO_ACTIVE_HIGH>;
+
+		panel-timing {
+			clock-frequency = <51206400>;
+			hactive = <1024>;
+			vactive = <600>;
+            hfront-porch = <160>;
+            hback-porch = <160>;
+            hsync-len = <10>;
+            vfront-porch = <12>;
+            vback-porch = <23>;
+            vsync-len = <10>;
+            hsync-active = <0>;
+            vsync-active = <0>;
+			de-active = <1>;
+			pixelclk-active = <1>;
+		};
+
+		port {
+			lcd_in: endpoint {
+				remote-endpoint = <&dpi_out>;
+			};
+		};
+	};
+
+	sound0: sound@0 {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "AM437x-TK";
+		simple-audio-card,widgets =
+			"Headphone", "Headphone Jack",
+			"Line", "Line In";
+		simple-audio-card,routing =
+			"Headphone Jack",	"HPLOUT",
+			"Headphone Jack",	"HPROUT",
+			"LINE1L",		"Line In",
+			"LINE1R",		"Line In";
+		simple-audio-card,format = "dsp_b";
+		simple-audio-card,bitclock-master = <&sound_master>;
+		simple-audio-card,frame-master = <&sound_master>;
+		simple-audio-card,bitclock-inversion;
+
+		simple-audio-card,cpu {
+			sound-dai = <&mcasp1>;
+            system-clock-frequency = <12000000>;
+		};
+
+		sound_master: simple-audio-card,codec {
+			sound-dai = <&tlv320aic3106>;
+			system-clock-frequency = <12000000>;
+		};
+    };
+
+};
+
+&am43xx_pinmux {
+	pinctrl-names = "default";
+	pinctrl-0 = <&wlan_pins_default &clkout1_pin>;
+
+    /* can 0 */
+	dcan0_default: dcan0_default_pins {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0x91c, PIN_OUTPUT | MUX_MODE1)		/* (C16) mii1_txd3.dcan0_tx */
+			AM4372_IOPAD(0x920, PIN_INPUT_PULLUP | MUX_MODE1)	/* (C13) mii1_txd2.dcan0_rx */
+		>;
+	};
+    /* can 1 */
+	dcan1_default: dcan1_default_pins {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0x980, PIN_OUTPUT | MUX_MODE2)		/* uart1_rxd.d_can1_tx */
+			AM4372_IOPAD(0x984, PIN_INPUT_PULLUP | MUX_MODE2)	/* uart1_txd.d_can1_rx */
+		>;
+	};
+
+    /* i2c1 */
+	i2c1_pins_default: i2c1_pins_default {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0xa40, PIN_INPUT_PULLUP | SLEWCTRL_FAST | MUX_MODE1)  /* (G20) gpio5_10.I2C1_SCL */
+			AM4372_IOPAD(0xa48, PIN_INPUT_PULLUP | SLEWCTRL_FAST | MUX_MODE1)  /* (E25) gpio5_12.I2C1_SDA */
+		>;
+	};
+
+    /* i2c2 */
+	i2c2_pins_default: i2c2_pins_default {
+		pinctrl-single,pins = <
+            AM4372_IOPAD(0x97c, PIN_INPUT_PULLUP | SLEWCTRL_FAST | MUX_MODE3) /* (L22) uart1_rtsn.I2C2_SCL */
+			AM4372_IOPAD(0x978, PIN_INPUT_PULLUP | SLEWCTRL_FAST | MUX_MODE3) /* (K22) uart1_ctsn.I2C2_SDA */
+		>;
+	};
+
+    /* mmc2 wifi */
+	mmc2_pins: pinmux_mmc2_pins {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0x88c, PIN_INPUT_PULLUP | MUX_MODE3 ) /* (A12) gpmc_clk.mmc2_clk */
+			AM4372_IOPAD(0x888, PIN_INPUT_PULLUP | MUX_MODE3 ) /* (B12) gpmc_csn3.mmc2_cmd */
+			AM4372_IOPAD(0x844, PIN_INPUT_PULLUP | MUX_MODE3 ) /* (C5) gpmc_a1.mmc2_dat0 */
+			AM4372_IOPAD(0x848, PIN_INPUT_PULLUP | MUX_MODE3 ) /* (C6) gpmc_a2.mmc2_dat1 */
+			AM4372_IOPAD(0x84c, PIN_INPUT_PULLUP | MUX_MODE3 ) /* (A4) gpmc_a3.mmc2_dat2 */
+			AM4372_IOPAD(0x878, PIN_INPUT_PULLUP | MUX_MODE3 ) /* (A3) gpmc_be1n.mmc2_dat3 */
+		>;
+	};
+
+    /* backlight */
+	ecap0_pins_default: backlight_pins_default {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0x964, PIN_OUTPUT_PULLUP | MUX_MODE0)       /* eCAP0_in_PWM0_out MODE0 */
+		>;
+	};
+
+    /* RMII */
+	cpsw_default: cpsw_default {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0x90c, PIN_INPUT_PULLUP | MUX_MODE1 ) /* (B14) mii1_crs.rmii1_crs_dv */
+			AM4372_IOPAD(0x910, PIN_INPUT_PULLUP | MUX_MODE1 ) /* (B13) mii1_rx_er.rmii1_rxer */
+			AM4372_IOPAD(0x914, PIN_OUTPUT_PULLDOWN | MUX_MODE1 ) /* (A13) mii1_tx_en.rmii1_txen */
+			AM4372_IOPAD(0x928, PIN_OUTPUT_PULLDOWN | MUX_MODE1 ) /* (B15) mii1_txd0.rmii1_txd0 */
+			AM4372_IOPAD(0x924, PIN_OUTPUT_PULLDOWN | MUX_MODE1 ) /* (A14) mii1_txd1.rmii1_txd1 */
+			AM4372_IOPAD(0x940, PIN_INPUT | MUX_MODE1 ) /* (F17) mii1_rxd0.rmii1_rxd0 */
+			AM4372_IOPAD(0x93c, PIN_INPUT | MUX_MODE1 ) /* (B16) mii1_rxd1.rmii1_rxd1 */
+			AM4372_IOPAD(0x944, PIN_INPUT_PULLUP | MUX_MODE0 ) /* (A16) rmii1_ref_clk.rmii1_refclk */
+
+		>;
+	};
+
+    /* mdio ethernet */
+	davinci_mdio_default: davinci_mdio_default {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0x948, PIN_INPUT_PULLUP | SLEWCTRL_FAST | MUX_MODE0)	/* mdio_data.mdio_data */
+			AM4372_IOPAD(0x94c, PIN_OUTPUT_PULLUP | MUX_MODE0)			/* mdio_clk.mdio_clk */
+		>;
+	};
+
+    /* display */
+	dss_pins: dss_pins {
+		pinctrl-single,pins = <
+            AM4372_IOPAD(0x8e0, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (B23) dss_vsync.dss_vsync */
+            AM4372_IOPAD(0x8e4, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (A23) dss_hsync.dss_hsync */
+            AM4372_IOPAD(0x8e8, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (A22) dss_pclk.dss_pclk */
+            AM4372_IOPAD(0x8ec, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (A24) dss_ac_bias_en.dss_ac_bias_en */
+            AM4372_IOPAD(0x8a0, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (B22) dss_data0.dss_data0 */
+            AM4372_IOPAD(0x8a4, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (A21) dss_data1.dss_data1 */
+            AM4372_IOPAD(0x8a8, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (B21) dss_data2.dss_data2 */
+            AM4372_IOPAD(0x8ac, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (C21) dss_data3.dss_data3 */
+            AM4372_IOPAD(0x8b0, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (A20) dss_data4.dss_data4 */
+            AM4372_IOPAD(0x8b4, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (B20) dss_data5.dss_data5 */
+            AM4372_IOPAD(0x8b8, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (C20) dss_data6.dss_data6 */
+            AM4372_IOPAD(0x8bc, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (E19) dss_data7.dss_data7 */
+            AM4372_IOPAD(0x8c0, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (A19) dss_data8.dss_data8 */
+            AM4372_IOPAD(0x8c4, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (B19) dss_data9.dss_data9 */
+            AM4372_IOPAD(0x8c8, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (A18) dss_data10.dss_data10 */
+            AM4372_IOPAD(0x8cc, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (B18) dss_data11.dss_data11 */
+            AM4372_IOPAD(0x8d0, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (C19) dss_data12.dss_data12 */
+            AM4372_IOPAD(0x8d4, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (D19) dss_data13.dss_data13 */
+            AM4372_IOPAD(0x8d8, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (C17) dss_data14.dss_data14 */
+            AM4372_IOPAD(0x8dc, PIN_OUTPUT_PULLUP | MUX_MODE0) /* (D17) dss_data15.dss_data15 */
+            AM4372_IOPAD(0x83c, PIN_OUTPUT_PULLUP | MUX_MODE1) /* (A11) gpmc_ad15.dss_data16 */
+            AM4372_IOPAD(0x838, PIN_OUTPUT_PULLUP | MUX_MODE1) /* (B11) gpmc_ad14.dss_data17 */
+		>;
+	};
+
+	/* display enable */
+	dss_pin_enable: dss_pin_enable {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0xa4c, PIN_OUTPUT_PULLUP | MUX_MODE7)
+
+		>;
+	};
+
+    /* lvds en */
+	lvds_pin_shutdown: lvds_pin_shutdown {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0xa74, PIN_OUTPUT_PULLUP | MUX_MODE9)
+
+		>;
+	};
+
+    /* uart1 modem */
+    uart1_pins_default: uart1_pins_default {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0x9e8, PIN_INPUT_PULLUP | MUX_MODE1) /* (AB20) cam1_data0.uart1_rxd */
+			AM4372_IOPAD(0x9ec, PIN_OUTPUT | MUX_MODE1) /* (AC21) cam1_data1.uart1_txd */
+			AM4372_IOPAD(0x9f0, PIN_INPUT_PULLUP | MUX_MODE1) /* (AD21) cam1_data2.uart1_ctsn */
+			AM4372_IOPAD(0x9f4, PIN_OUTPUT | MUX_MODE1) /* (AE22) cam1_data3.uart1_rtsn */
+			AM4372_IOPAD(0xa00, PIN_INPUT | MUX_MODE1) /* (AD23) cam1_data6.uart1_dcdn */
+			AM4372_IOPAD(0x9fc, PIN_INPUT | MUX_MODE1) /* (AE23) cam1_data5.uart1_dsrn */
+			AM4372_IOPAD(0xa04, PIN_OUTPUT | MUX_MODE1) /* (AE24) cam1_data7.uart1_dtrn */
+			AM4372_IOPAD(0x9f8, PIN_INPUT | MUX_MODE1) /* (AD22) cam1_data4.uart1_rin */
+		>;
+	};
+
+    /* sim sel */
+	sim_pin_change: sim_pin_change {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0xa78, PIN_OUTPUT | MUX_MODE7 ) /* (H20) clkreq.gpio0[24] */
+		>;
+	};
+
+    /* rs485_1 */
+    uart2_pins: uart2_pins {
+        pinctrl-single,pins = <
+		    AM4372_IOPAD(0x92c, PIN_INPUT_PULLUP | MUX_MODE1 ) /* (D14) mii1_tx_clk.uart2_rxd */
+    		AM4372_IOPAD(0x930, PIN_OUTPUT_PULLDOWN | MUX_MODE1 ) /* (D13) mii1_rx_clk.uart2_txd */
+    		AM4372_IOPAD(0x834,  PIN_OUTPUT_PULLDOWN | MUX_MODE7 ) /* (C11) gpmc_ad13.gpio1[13] */
+	    >;
+    };
+
+    /* rs485_2 */
+    uart4_pins: uart4_pins {
+        pinctrl-single,pins = <
+            AM4372_IOPAD(0x968, PIN_INPUT_PULLUP | MUX_MODE1) /* (L25) uart0_ctsn.uart4_rxd */
+			AM4372_IOPAD(0x96c, PIN_OUTPUT_PULLDOWN | MUX_MODE1) /* (J25) uart0_rtsn.uart4_txd */
+            AM4372_IOPAD(0x830, PIN_OUTPUT_PULLDOWN | MUX_MODE7) /* (E11) gpmc_ad12.gpio1[12] */
+	    >;
+    };
+
+    /* inputs */
+    gpio3_input_pins_default: pinmux_gpio3_input_pins_default {
+		pinctrl-single,pins = <
+            AM4372_IOPAD(0x994, PIN_INPUT | MUX_MODE7) /* (N22) mcasp0_fsx.gpio3[15] */
+			AM4372_IOPAD(0x998, PIN_INPUT | MUX_MODE7) /* (H23) mcasp0_axr0.gpio3[16] */
+			AM4372_IOPAD(0x99c, PIN_INPUT | MUX_MODE7) /* (M24) mcasp0_ahclkr.gpio3[17] */
+		>;
+    };
+
+    /* Buzzer */
+    buzzer_output_pins_default: pinmux_buzzer_output_pins_default {
+		pinctrl-single,pins = <
+            AM4372_IOPAD(0x860, PIN_OUTPUT | MUX_MODE7) /* (F7) gpmc_a8.gpio1[24] */
+		>;
+    };
+
+    /* Brake */
+    brake_output_pins_default: pinmux_brake_output_pins_default {
+		pinctrl-single,pins = <
+            AM4372_IOPAD(0x86c, PIN_OUTPUT | MUX_MODE7) /* (D8) gpmc_a11.gpio1[27] */
+		>;
+    };
+
+    /* 12V En */
+    v12_output_pins_default: pinmux_v12_output_pins_default {
+		pinctrl-single,pins = <
+            AM4372_IOPAD(0x85c, PIN_OUTPUT | MUX_MODE7) /* (F6) gpmc_a7.gpio1[23] */
+		>;
+    };
+
+    /* Led */
+    led_output_pins_default: pinmux_led_output_pins_default {
+		pinctrl-single,pins = <
+            AM4372_IOPAD(0x854, PIN_OUTPUT | MUX_MODE7) /* (E7) gpmc_a5.gpio1[21] */
+		>;
+    };
+
+    /* accl int */
+    accl_input_pins_default: pinmux_accl_input_pins_default {
+		pinctrl-single,pins = <
+            AM4372_IOPAD(0x868, PIN_INPUT_PULLUP | MUX_MODE7) /* (G8) gpmc_a10.gpio1[26] */
+		>;
+    };
+
+    /* charger int */
+    charger_input_pins_default: pinmux_charger_input_pins_default {
+		pinctrl-single,pins = <
+            AM4372_IOPAD(0x894, PIN_INPUT_PULLUP | MUX_MODE7) /* (E10) gpmc_oen_ren.gpio2[3] */
+		>;
+    };
+
+    /* inputs */
+    gpio4_input_pins_default: pinmux_gpio4_input_pins_default {
+		pinctrl-single,pins = <
+            AM4372_IOPAD(0x9c8, PIN_INPUT | MUX_MODE7) /* (AA19) cam0_data9.gpio4[6] */
+		>;
+    };
+
+    /* mcasp1 */
+	mcasp1_pins: mcasp1_pins {
+		pinctrl-single,pins = <
+            AM4372_IOPAD(0x9a0, PIN_INPUT_PULLDOWN | MUX_MODE3) /* (L23) mcasp0_aclkr.mcasp1_aclkx */
+			AM4372_IOPAD(0x9a4, PIN_INPUT_PULLDOWN | MUX_MODE3) /* (K23) mcasp0_fsr.mcasp1_fsx */
+			AM4372_IOPAD(0x9a8, PIN_OUTPUT_PULLDOWN | MUX_MODE3) /* (M25) mcasp0_axr1.mcasp1_axr0 */
+			AM4372_IOPAD(0x9ac, PIN_INPUT_PULLDOWN | MUX_MODE3) /* (L24) mcasp0_ahclkx.mcasp1_axr1 */
+		>;
+	};
+
+    /* gsm pow on */
+	modem_pow_pin_enable: modem_pow_pin_enable {
+		pinctrl-single,pins = <
+	        AM4372_IOPAD(0x898, PIN_OUTPUT | MUX_MODE7 ) /* (D10) gpmc_wen.gpio2[4] */
+		>;
+	};
+
+    /* cam0 */
+	vpfe0_pins_default: vpfe0_pins_default {
+		pinctrl-single,pins = <
+            AM4372_IOPAD(0x9b0, PIN_INPUT_PULLUP | MUX_MODE0) /* (AE17) cam0_hd.cam0_hd */
+			AM4372_IOPAD(0x9b4, PIN_INPUT_PULLUP | MUX_MODE0) /* (AD18) cam0_vd.cam0_vd */
+			AM4372_IOPAD(0x9c0, PIN_INPUT_PULLUP | MUX_MODE0) /* (AC20) cam0_pclk.cam0_pclk */
+			AM4372_IOPAD(0xa08, PIN_INPUT_PULLUP | MUX_MODE0) /* (AE18) cam0_data0.cam0_data0 */
+			AM4372_IOPAD(0xa0c, PIN_INPUT_PULLUP | MUX_MODE0) /* (AB18) cam0_data1.cam0_data1 */
+			AM4372_IOPAD(0xa10, PIN_INPUT_PULLUP | MUX_MODE0) /* (Y18) cam0_data2.cam0_data2 */
+			AM4372_IOPAD(0xa14, PIN_INPUT_PULLUP | MUX_MODE0) /* (AA18) cam0_data3.cam0_data3 */
+			AM4372_IOPAD(0xa18, PIN_INPUT_PULLUP | MUX_MODE0) /* (AE19) cam0_data4.cam0_data4 */
+			AM4372_IOPAD(0xa1c, PIN_INPUT_PULLUP | MUX_MODE0) /* (AD19) cam0_data5.cam0_data5 */
+			AM4372_IOPAD(0xa20, PIN_INPUT_PULLUP | MUX_MODE0) /* (AE20) cam0_data6.cam0_data6 */
+			AM4372_IOPAD(0xa24, PIN_INPUT_PULLUP | MUX_MODE0) /* (AD20) cam0_data7.cam0_data7 */
+
+            AM4372_IOPAD(0x9b8, PIN_INPUT_PULLUP | MUX_MODE7) /* (AC18) cam0_field.gpio4[2] */
+			AM4372_IOPAD(0x9bc, PIN_OUTPUT | MUX_MODE7) /* (AD17) cam0_wen.gpio4[3] */
+			AM4372_IOPAD(0x9e0, PIN_INPUT_PULLUP | MUX_MODE7) /* (AC25) cam1_field.gpio4[12] */
+			AM4372_IOPAD(0x9e4, PIN_OUTPUT | MUX_MODE7) /* (AB25) cam1_wen.gpio4[13] */
+		>;
+	};
+
+    /* mclk */
+	clkout1_pin: pinmux_clkout1_pin {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0xa70, PIN_OUTPUT_PULLDOWN | MUX_MODE3)	/* XDMA_EVENT_INTR0/CLKOUT1 */
+		>;
+	};
+
+    /* uart3 bt */
+    uart3_pins: uart3_pins {
+        pinctrl-single,pins = <
+            AM4372_IOPAD(0xa28, PIN_INPUT_PULLUP | MUX_MODE0) /* (H25) uart3_rxd.uart3_rxd */
+			AM4372_IOPAD(0xa2c, PIN_OUTPUT_PULLDOWN | MUX_MODE0) /* (H24) uart3_txd.uart3_txd */
+			AM4372_IOPAD(0xa30, PIN_INPUT | MUX_MODE0) /* (H22) uart3_ctsn.uart3_ctsn */
+			AM4372_IOPAD(0xa34, PIN_OUTPUT | MUX_MODE0) /* (K24) uart3_rtsn.uart3_rtsn */
+
+            AM4372_IOPAD(0x934, PIN_OUTPUT | MUX_MODE7) /* (C14) mii1_rxd3.gpio2[18] bt enable*/
+	    >;
+    };
+
+    /* uart gps */
+    uart5_pins: uart5_pins {
+        pinctrl-single,pins = <
+    		AM4372_IOPAD(0x908, PIN_INPUT_PULLUP | MUX_MODE3 ) /* (D16) mii1_col.uart5_rxd */
+    		AM4372_IOPAD(0x918, PIN_OUTPUT_PULLDOWN | MUX_MODE3 ) /* (A15) mii1_rx_dv.uart5_txd */
+
+            AM4372_IOPAD(0xa38, PIN_OUTPUT | MUX_MODE7) /* (D25) gpio5_8.gpio5[8] gps pow on*/
+	    >;
+    };
+
+    /* wlan pins */
+	wlan_pins_default: pinmux_wlan_pins_default {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0x858, PIN_INPUT  | WAKEUP_ENABLE | MUX_MODE7 ) /* (E8) gpmc_a6.gpio1[22] irq*/
+            AM4372_IOPAD(0x840, PIN_OUTPUT | MUX_MODE7) /* (C3) gpmc_a0.gpio1[16] wifi enable*/
+            AM4372_IOPAD(0x864, PIN_OUTPUT | MUX_MODE7) /* (B4) gpmc_a9.gpio1[25] power en*/
+		>;
+	};
+
+    /* spi0 */
+	spi0_pins: spi0_pins {
+		pinctrl-single,pins = <
+            AM4372_IOPAD(0x950, PIN_OUTPUT | MUX_MODE0) /* (P23) spi0_sclk.spi0_sclk */
+			AM4372_IOPAD(0x954, PIN_INPUT | MUX_MODE0) /* (T22) spi0_d0.spi0_d0 */
+			AM4372_IOPAD(0x958, PIN_INPUT | MUX_MODE0) /* (T21) spi0_d1.spi0_d1 */
+			AM4372_IOPAD(0x95c, PIN_OUTPUT | MUX_MODE0) /* (T20) spi0_cs0.spi0_cs0 */
+			AM4372_IOPAD(0x960, PIN_OUTPUT | MUX_MODE0) /* (R25) spi0_cs1.spi0_cs1 */
+			AM4372_IOPAD(0x9d0, PIN_OUTPUT | MUX_MODE2) /* (AD24) cam1_data8.spi0_cs2 */
+			AM4372_IOPAD(0x9d4, PIN_OUTPUT | MUX_MODE2) /* (AD25) cam1_hd.spi0_cs3 */
+
+            AM4372_IOPAD(0x9cc, PIN_INPUT | MUX_MODE7) /* (AC24) cam1_data9.gpio4[7] brige 0*/
+            AM4372_IOPAD(0x9dc, PIN_INPUT | MUX_MODE7) /* (AE21) cam1_pclk.gpio4[11] brige 1*/
+            AM4372_IOPAD(0x938, PIN_INPUT | MUX_MODE7) /* (E16) mii1_rxd2.gpio2[19] brige 2*/
+            AM4372_IOPAD(0xaa4, PIN_INPUT | MUX_MODE7) /* (N23) EMU0.gpio3[7] bridge 3*/
+
+		>;
+	};
+
+    /* spi2 */
+	spi2_pins: spi2_pins {
+		pinctrl-single,pins = <
+            AM4372_IOPAD(0xa60, PIN_OUTPUT | MUX_MODE0) /* (N20) spi2_sclk.spi2_sclk */
+			AM4372_IOPAD(0xa64, PIN_INPUT | MUX_MODE0) /* (P22) spi2_d0.spi2_d0 */
+			AM4372_IOPAD(0xa68, PIN_INPUT | MUX_MODE0) /* (P20) spi2_d1.spi2_d1 */
+			AM4372_IOPAD(0xa6c, PIN_OUTPUT | MUX_MODE0) /* (T23) spi2_cs0.spi2_cs0 */
+			AM4372_IOPAD(0x9d8, PIN_OUTPUT | MUX_MODE4) /* (AC23) cam1_vd.spi2_cs2 */
+
+            AM4372_IOPAD(0xa44, PIN_INPUT | MUX_MODE7) /* (F23) gpio5_11.gpio5[11] brige 4*/
+            AM4372_IOPAD(0x89c, PIN_INPUT | MUX_MODE7) /* (C10) gpmc_be0n_cle.gpio2[5] brige 5*/
+
+		>;
+	};
+
+};
+
+&i2c2 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c2_pins_default &accl_input_pins_default>;
+	clock-frequency = <400000>;
+
+    lsm6dsm@6b {
+    	compatible = "st,lsm6dsm";
+	    reg = <0x6b>;
+    	interrupt-parent = <&gpio1>;
+    	interrupts = <26 IRQ_TYPE_EDGE_RISING>;
+};
+};
+
+&i2c1 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c1_pins_default &charger_input_pins_default &vpfe0_pins_default>;
+	clock-frequency = <400000>;
+
+
+	tlv320aic3106: tlv320aic3106@1b {
+		#sound-dai-cells = <0>;
+		compatible = "ti,tlv320aic3106";
+		reg = <0x1b>;
+		status = "okay";
+
+		/* Regulators */
+		AVDD-supply = <&evm_v3_3d>;
+		IOVDD-supply = <&evm_v3_3d>;
+		DRVDD-supply = <&evm_v3_3d>;
+		DVDD-supply = <&ldo1>;
+	};
+
+	adv7180@21 {
+		compatible = "adi,adv7180";
+		reg = <0x21>;
+	};
+
+    bq25892: bq25892@6b {
+        compatible = "ti,bq25892";
+        reg = <0x6b>;
+		interrupt-parent = <&gpio2>;
+		interrupts = <3 IRQ_TYPE_LEVEL_HIGH>;
+        ti,battery-regulation-voltage = <4200000>;
+        ti,charge-current = <500000>;
+        ti,termination-current = <50000>;
+        ti,precharge-current = <128000>;
+        ti,minimum-sys-voltage = <3600000>;
+        ti,boost-voltage = <5000000>;
+        ti,boost-max-current = <1000000>;
+        ti,thermal-regulation-threshold = <120>;
+		system-power-controller;
+    };
+};
+
+&epwmss0	 {
+	status = "okay";
+};
+
+&tscadc {
+	status = "okay";
+
+	tsc {
+		ti,wires = <4>;
+		ti,x-plate-resistance = <760>;
+		ti,coordinate-readouts = <5>;
+		ti,wire-config = <0x00 0x11 0x22 0x33>;
+		ti,charge-delay = <0x400>;
+	};
+
+	adc {
+		ti,adc-channels = <4 5 6 7>;
+	};
+};
+
+&mmc3 {
+	status = "okay";
+	dmas = <&edma_xbar 30 0 1>,
+		<&edma_xbar 31 0 2>;
+	dma-names = "tx", "rx";
+	vmmc-supply = <&vmmcwl_fixed>;
+
+	bus-width = <4>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&mmc2_pins>;
+	cap-power-off-card;
+	keep-power-in-suspend;
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	wlcore: wlcore@0 {
+		compatible = "ti,wl1835";
+		reg = <2>;
+		interrupt-parent = <&gpio1>;
+		interrupts = <22 IRQ_TYPE_LEVEL_HIGH>;
+	};
+};
+
+&ecap0 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&ecap0_pins_default>;
+};
+
+&gpio0 {
+	status = "okay";
+	pinctrl-0 = <&sim_pin_change>;
+};
+
+&gpio1 {
+	status = "okay";
+	pinctrl-0 = <&brake_output_pins_default &buzzer_output_pins_default &v12_output_pins_default>;
+};
+
+&gpio2 {
+	status = "okay";
+	pinctrl-0 = <&modem_pow_pin_enable>;
+};
+
+&gpio3 {
+	pinctrl-0 = <&gpio3_input_pins_default>;
+	status = "okay";
+
+};
+
+&gpio4 {
+	status = "okay";
+    pinctrl-0 = <&gpio4_input_pins_default>;
+};
+
+&gpio5 {
+	status = "okay";
+	pinctrl-0 = <&dss_pin_enable>;
+	p13 {
+		gpio-hog;
+		gpios = <13 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "disp_pow_on";
+	};
+};
+
+&usb2_phy1 {
+	status = "okay";
+};
+
+&usb1 {
+	dr_mode = "peripheral";
+	status = "okay";
+};
+
+&usb2_phy2 {
+	status = "okay";
+};
+
+&usb2 {
+	dr_mode = "host";
+	status = "okay";
+};
+
+&mac {
+	slaves = <1>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&cpsw_default>;
+	status = "okay";
+};
+
+&davinci_mdio {
+	pinctrl-names = "default";
+	pinctrl-0 = <&davinci_mdio_default>;
+	status = "okay";
+};
+
+&dcan0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&dcan0_default>;
+	status = "okay";
+};
+
+&dcan1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&dcan1_default>;
+	status = "okay";
+};
+
+&cpsw_emac0 {
+	phy_id = <&davinci_mdio>, <7>;
+	phy-mode = "rmii";
+};
+
+&phy_sel {
+	rmii-clock-ext;
+};
+
+&elm {
+	status = "okay";
+};
+
+
+&uart1 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart1_pins_default>;
+};
+
+&uart4 {
+    compatible = "ti,omap2-uart-legacy";
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart4_pins>;
+    rts-gpio = <&gpio1 12 GPIO_ACTIVE_HIGH>;
+    rs485-rts-active-high;
+    rs485-rts-delay = <0 0>;
+    linux,rs485-enabled-at-boot-time;
+};
+
+&uart2 {
+    compatible = "ti,omap2-uart-legacy";
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart2_pins>;
+    rts-gpio = <&gpio1 24 GPIO_ACTIVE_HIGH>;
+    rs485-rts-active-high;
+    rs485-rts-delay = <0 0>;
+    linux,rs485-enabled-at-boot-time;
+};
+
+&uart5 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart5_pins>;
+};
+
+&mcasp1 {
+	#sound-dai-cells = <0>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&mcasp1_pins>;
+
+	status = "okay";
+
+	op-mode = <0>; /* MCASP_IIS_MODE */
+	tdm-slots = <2>;
+	/* 4 serializers */
+	serial-dir = <  /* 0: INACTIVE, 1: TX, 2: RX */
+		1 2 0 0
+	>;
+	tx-num-evt = <32>;
+	rx-num-evt = <32>;
+};
+
+&dss {
+	status = "okay";
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&dss_pins>;
+
+	port {
+		dpi_out: endpoint@0 {
+			remote-endpoint = <&lcd_in>;
+			data-lines = <18>;
+		};
+	};
+};
+
+&spi0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi0_pins>;
+	status = "okay";
+	ti,spi-num-cs = <4>;
+	ti,pindir-d0-out-d1-in;
+	
+	sc16is752_0: sc16is752@0 {
+		compatible = "nxp,sc16is752";
+		reg = <0>;
+		spi-max-frequency = <1000000>;
+		clocks = <&sc_mstrclk>;
+		interrupt-parent = <&gpio4>;
+		interrupts = <7 IRQ_TYPE_EDGE_FALLING>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+
+	sc16is752_1: sc16is752@1 {
+		compatible = "nxp,sc16is752";
+		reg = <1>;
+		spi-max-frequency = <1000000>;
+		clocks = <&sc_mstrclk>;
+		interrupt-parent = <&gpio4>;
+		interrupts = <11 IRQ_TYPE_EDGE_FALLING>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+
+	sc16is752_2: sc16is752@2 {
+		compatible = "nxp,sc16is752";
+		reg = <2>;
+		spi-max-frequency = <1000000>;
+		clocks = <&sc_mstrclk>;
+		interrupt-parent = <&gpio2>;
+		interrupts = <19 IRQ_TYPE_EDGE_FALLING>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+
+	sc16is752_3: sc16is752@3 {
+		compatible = "nxp,sc16is752";
+		reg = <3>;
+		spi-max-frequency = <1000000>;
+		clocks = <&sc_mstrclk>;
+		interrupt-parent = <&gpio3>;
+		interrupts = <7 IRQ_TYPE_EDGE_FALLING>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+};
+
+&spi2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi2_pins>;
+	status = "okay";
+	ti,spi-num-cs = <2>;
+	ti,pindir-d0-out-d1-in;
+
+	can2: can@2 {
+		compatible = "microchip,mcp2515";
+		reg = <0>;
+        spi-max-frequency = <1000000>;
+		clocks = <&sc_mstrclk>;
+		interrupt-parent = <&gpio5>;
+		interrupts = <11 IRQ_TYPE_EDGE_FALLING>;
+	};
+
+	can3: can@3 {
+		compatible = "microchip,mcp2515";
+		reg = <1>;
+		clocks = <&sc_mstrclk>;
+        spi-max-frequency = <1000000>;
+		interrupt-parent = <&gpio2>;
+		interrupts = <5 IRQ_TYPE_EDGE_FALLING>;
+	};
+};
+
+&rtc {
+	status = "disabled";
+};
+
+&sgx {
+	status = "okay";
+};
