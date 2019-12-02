@@ -25,7 +25,8 @@
 		regulator-name = "evm_v3_3d";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		enable-active-high;
+        regulator-always-on;
+		regulator-boot-on;
 	};
 
 
