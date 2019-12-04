@@ -252,6 +252,15 @@
 		>;
 	};
 
+	i2c2_pins_default: i2c2_pins_default {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0x97c, PIN_INPUT_PULLUP | SLEWCTRL_FAST | MUX_MODE3)  /* (L22) uart1_rtsn.I2C2_SCL */
+			AM4372_IOPAD(0x978, PIN_INPUT_PULLUP | SLEWCTRL_FAST | MUX_MODE3)  /* (K22) uart1_ctsn.I2C2_SDA */
+
+            AM4372_IOPAD(0xa60, PIN_INPUT_PULLUP | MUX_MODE7) /* (N20) spi2_sclk.gpio3[24] interrupt lis3dh*/
+		>;
+	};
+
 	mmc2_pins: pinmux_mmc2_pins {
 		pinctrl-single,pins = <
 			AM4372_IOPAD(0x88c, PIN_INPUT_PULLUP | MUX_MODE3 ) /* (A12) gpmc_clk.mmc2_clk */
@@ -515,6 +524,25 @@
         reg = <0x18>;
 		status = "okay";
     };
+};
+
+&i2c2 {
+	status = "okay";
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&i2c2_pins_default>;
+	clock-frequency = <400000>;
+
+	lis3dh: accelerometer@18 {
+		compatible = "st,lis3dh-accel";
+		reg = <0x18>;
+
+		interrupt-parent = <&gpio3>;
+		interrupts = <24 IRQ_TYPE_EDGE_BOTH>;
+
+		rotation-matrix = "0", "-1", "0",
+				  "1", "0", "0",
+				  "0", "0", "1";
+	};
 };
 
 &spi0 {
