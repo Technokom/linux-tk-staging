@@ -252,6 +252,9 @@
 		>;
 	};
 
+   
+
+
 	mmc2_pins: pinmux_mmc2_pins {
 		pinctrl-single,pins = <
 			AM4372_IOPAD(0x88c, PIN_INPUT_PULLUP | MUX_MODE3 ) /* (A12) gpmc_clk.mmc2_clk */

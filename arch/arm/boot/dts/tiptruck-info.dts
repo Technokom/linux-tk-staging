@@ -334,7 +334,12 @@
 			AM4372_IOPAD(0xa1c, PIN_INPUT_PULLUP | MUX_MODE0) /* (AD19) cam0_data5.cam0_data5 */
 			AM4372_IOPAD(0xa20, PIN_INPUT_PULLUP | MUX_MODE0) /* (AE20) cam0_data6.cam0_data6 */
 			AM4372_IOPAD(0xa24, PIN_INPUT_PULLUP | MUX_MODE0) /* (AD20) cam0_data7.cam0_data7 */
+		>;
+	};
 
+    /* cam0 i2c*/
+	vpfe0_pins_control_default: vpfe0_pins_control_default {
+		pinctrl-single,pins = <
             AM4372_IOPAD(0x9b8, PIN_INPUT_PULLUP | MUX_MODE7) /* (AC18) cam0_field.gpio4[2] */
 			AM4372_IOPAD(0x9bc, PIN_OUTPUT | MUX_MODE7) /* (AD17) cam0_wen.gpio4[3] */
 			AM4372_IOPAD(0x9e0, PIN_INPUT_PULLUP | MUX_MODE7) /* (AC25) cam1_field.gpio4[12] */
@@ -433,7 +438,7 @@
 &i2c1 {
 	status = "okay";
 	pinctrl-names = "default";
-	pinctrl-0 = <&i2c1_pins_default &charger_input_pins_default &vpfe0_pins_default>;
+	pinctrl-0 = <&i2c1_pins_default &charger_input_pins_default>;
 	clock-frequency = <400000>;
 
 
@@ -452,7 +457,20 @@
 
 	adv7180@21 {
 		compatible = "adi,adv7180";
+        powerdown-gpios = <&gpio4 13 GPIO_ACTIVE_LOW>;
+    	pinctrl-names = "default";
+		pinctrl-0 = <&vpfe0_pins_control_default>;
+		interrupt-parent = <&gpio4>;
+		interrupts = <12 IRQ_TYPE_LEVEL_LOW>;
+
 		reg = <0x21>;
+
+		port {
+			adv7180_0: endpoint {
+				remote-endpoint = <&vpfe0_ep>;
+                bus-width = <8>;
+			};
+		};
 	};
 
     bq25892: bq25892@6b {
@@ -470,6 +488,22 @@
         ti,thermal-regulation-threshold = <120>;
 		system-power-controller;
     };
+};
+
+&vpfe0 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&vpfe0_pins_default>;
+
+	port {
+		vpfe0_ep: endpoint {
+			remote-endpoint = <&adv7180_0>;
+			ti,am437x-vpfe-interface = <0>;
+			bus-width = <8>;
+			hsync-active = <0>;
+			vsync-active = <0>;
+		};
+	};
 };
 
 &epwmss0	 {
@@ -739,7 +773,7 @@
 	ti,spi-num-cs = <2>;
 	ti,pindir-d0-out-d1-in;
 
-	can2: can@2 {
+	can2: can@0 {
 		compatible = "microchip,mcp2515";
 		reg = <0>;
         spi-max-frequency = <1000000>;
@@ -748,7 +782,7 @@
 		interrupts = <11 IRQ_TYPE_EDGE_FALLING>;
 	};
 
-	can3: can@3 {
+	can3: can@1 {
 		compatible = "microchip,mcp2515";
 		reg = <1>;
 		clocks = <&sc_mstrclk>;
