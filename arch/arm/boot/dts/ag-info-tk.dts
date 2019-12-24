@@ -479,7 +479,7 @@
 			AM4372_IOPAD(0x954, PIN_INPUT | MUX_MODE0)           /* spi0_d0.spi0_d0 */
 			AM4372_IOPAD(0x958, PIN_INPUT | MUX_MODE0)           /* spi0_d1.spi0_d1 */
 			AM4372_IOPAD(0x95c, PIN_OUTPUT | MUX_MODE0)          /* spi0_cs0.spi0_cs0 */
-			AM4372_IOPAD(0x9cc, PIN_INPUT | MUX_MODE7)
+			AM4372_IOPAD(0x9cc, PIN_INPUT_PULLUP | MUX_MODE7)
 			AM4372_IOPAD(0x994, PIN_OUTPUT | MUX_MODE7) 
 		>;
 	};
