@@ -807,6 +807,14 @@ config TI_ADS8688
 	  This driver can also be built as a module. If so, the module will be
 	  called ti-ads8688.
 
+config TI_AM437X_ADC
+	tristate "Custom MB AM437X ADC1 driver"
+	select IIO_BUFFER
+	select IIO_KFIFO_BUF
+	help
+	  Say yes here to build support for Texas Instruments ADC
+	  driver which is also a MFD client.
+
 config TI_AM335X_ADC
 	tristate "TI's AM335X ADC driver"
 	depends on MFD_TI_AM335X_TSCADC && HAS_DMA
