@@ -29,16 +29,6 @@
         regulator-boot-on;
 	};
 
-
-	vmmcwl_fixed: fixedregulator-mmcwl {
-		compatible = "regulator-fixed";
-		regulator-name = "vmmcwl_fixed";
-		regulator-min-microvolt = <3300000>;
-		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio1 23 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
-	};
-
 	/* fixed 12MHz oscillator */
 	refclk: oscillator {
 		#clock-cells = <0>;
