@@ -258,6 +258,8 @@
 			AM4372_IOPAD(0x978, PIN_INPUT_PULLUP | SLEWCTRL_FAST | MUX_MODE3)  /* (K22) uart1_ctsn.I2C2_SDA */
 
             AM4372_IOPAD(0xa60, PIN_INPUT_PULLUP | MUX_MODE7) /* (N20) spi2_sclk.gpio3[24] interrupt lis3dh*/
+            AM4372_IOPAD(0xa00, PIN_OUTPUT | MUX_MODE7) /* (AD23) cam1_data6.gpio4[20] powerdown adv7513*/
+            AM4372_IOPAD(0x9f4, PIN_INPUT | MUX_MODE7) /* (AE22) cam1_data3.gpio4[17] interrupt adv7513*/
 		>;
 	};
 
@@ -543,6 +545,36 @@
 				  "1", "0", "0",
 				  "0", "0", "1";
 	};
+
+    adv7513: adv7513@39 {
+		compatible = "adi,adv7513";
+		reg = <0x39>;
+
+		interrupt-parent = <&gpio4>;
+		interrupts = <17 IRQ_TYPE_EDGE_FALLING>;
+
+        pd = <&gpio4 20 GPIO_ACTIVE_LOW>;
+
+		adi,input-depth = <8>;
+		adi,input-colorspace = "rgb";
+		adi,input-clock = "1x";
+		adi,input-style = <1>;
+		adi,input-justification = "evenly";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				adv7511_in: endpoint {
+					remote-endpoint = <&dpi_out>;
+				};
+			};
+
+		};
+	};
+
 };
 
 &spi0 {
@@ -676,7 +708,7 @@
 };
 
 &usb1 {
-	dr_mode = "peripheral";
+	dr_mode = "host";
 	status = "okay";
 };
 
@@ -802,7 +834,7 @@
 
 	port {
 		dpi_out: endpoint@0 {
-			remote-endpoint = <&lcd_in>;
+			remote-endpoint = <&adv7511_in>;
 			data-lines = <18>;
 		};
 	};
