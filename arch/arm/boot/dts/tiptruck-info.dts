@@ -365,10 +365,10 @@
     /* uart3 bt */
     uart3_pins: uart3_pins {
         pinctrl-single,pins = <
-            AM4372_IOPAD(0xa28, PIN_INPUT_PULLUP | MUX_MODE0) /* (H25) uart3_rxd.uart3_rxd */
+            AM4372_IOPAD(0xa28, PIN_INPUT | MUX_MODE0) /* (H25) uart3_rxd.uart3_rxd */
 			AM4372_IOPAD(0xa2c, PIN_OUTPUT_PULLDOWN | MUX_MODE0) /* (H24) uart3_txd.uart3_txd */
-			AM4372_IOPAD(0xa30, PIN_INPUT | MUX_MODE0) /* (H22) uart3_ctsn.uart3_ctsn */
-			AM4372_IOPAD(0xa34, PIN_OUTPUT | MUX_MODE0) /* (K24) uart3_rtsn.uart3_rtsn */
+			AM4372_IOPAD(0xa30, PIN_INPUT_PULLUP | MUX_MODE0) /* (H22) uart3_ctsn.uart3_ctsn */
+			AM4372_IOPAD(0xa34, PIN_OUTPUT_PULLDOWN | MUX_MODE0) /* (K24) uart3_rtsn.uart3_rtsn */
 
             AM4372_IOPAD(0x934, PIN_OUTPUT | MUX_MODE7) /* (C14) mii1_rxd3.gpior2[18] bt enable*/
 	    >;
@@ -397,17 +397,17 @@
 	spi0_pins: spi0_pins {
 		pinctrl-single,pins = <
             AM4372_IOPAD(0x950, PIN_INPUT_PULLUP | MUX_MODE0) /* (P23) spi0_sclk.spi0_sclk */
-			AM4372_IOPAD(0x954, PIN_INPUT_PULLUP | MUX_MODE0) /* (T22) spi0_d0.spi0_d0 */
-			AM4372_IOPAD(0x958, PIN_INPUT_PULLUP | MUX_MODE0) /* (T21) spi0_d1.spi0_d1 */
-			AM4372_IOPAD(0x95c, PIN_INPUT_PULLUP | MUX_MODE0) /* (T20) spi0_cs0.spi0_cs0 */
-			AM4372_IOPAD(0x960, PIN_INPUT_PULLUP | MUX_MODE0) /* (R25) spi0_cs1.spi0_cs1 */
-			AM4372_IOPAD(0x9d0, PIN_INPUT_PULLUP | MUX_MODE2) /* (AD24) cam1_data8.spi0_cs2 */
-			AM4372_IOPAD(0x9d4, PIN_INPUT_PULLUP | MUX_MODE2) /* (AD25) cam1_hd.spi0_cs3 */
+			AM4372_IOPAD(0x954, PIN_INPUT_PULLDOWN | MUX_MODE0) /* (T22) spi0_d0.spi0_d0 */
+			AM4372_IOPAD(0x958, PIN_INPUT_PULLDOWN | MUX_MODE0) /* (T21) spi0_d1.spi0_d1 */
+			AM4372_IOPAD(0x95c, PIN_INPUT | MUX_MODE0) /* (T20) spi0_cs0.spi0_cs0 */
+			AM4372_IOPAD(0x960, PIN_INPUT | MUX_MODE0) /* (R25) spi0_cs1.spi0_cs1 */
+			AM4372_IOPAD(0x9d0, PIN_INPUT | MUX_MODE2) /* (AD24) cam1_data8.spi0_cs2 */
+			AM4372_IOPAD(0x9d4, PIN_INPUT | MUX_MODE2) /* (AD25) cam1_hd.spi0_cs3 */
 
-            AM4372_IOPAD(0x9cc, PIN_INPUT_PULLUP | MUX_MODE7) /* (AC24) cam1_data9.gpio4[7] brige 0*/
-            AM4372_IOPAD(0x9dc, PIN_INPUT_PULLUP | MUX_MODE7) /* (AE21) cam1_pclk.gpio4[11] brige 1*/
-            AM4372_IOPAD(0x938, PIN_INPUT_PULLUP | MUX_MODE7) /* (E16) mii1_rxd2.gpio2[19] brige 2*/
-            AM4372_IOPAD(0xaa4, PIN_INPUT_PULLUP | MUX_MODE7) /* (N23) EMU0.gpio3[7] bridge 3*/
+            AM4372_IOPAD(0x9cc, PIN_INPUT | MUX_MODE7) /* (AC24) cam1_data9.gpio4[7] brige 0*/
+            AM4372_IOPAD(0x9dc, PIN_INPUT | MUX_MODE7) /* (AE21) cam1_pclk.gpio4[11] brige 1*/
+            AM4372_IOPAD(0x938, PIN_INPUT | MUX_MODE7) /* (E16) mii1_rxd2.gpio2[19] brige 2*/
+            AM4372_IOPAD(0xaa4, PIN_INPUT | MUX_MODE7) /* (N23) EMU0.gpio3[7] bridge 3*/
 
 		>;
 	};
@@ -685,6 +685,12 @@
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart3_pins>;
+
+	bluetooth {
+		compatible = "ti,wl1835-st";
+		enable-gpios = <&gpio2 18 GPIO_ACTIVE_HIGH>;
+	};
+
 };
 
 &uart4 {
@@ -756,7 +762,7 @@
 	sc16is752_0: sc16is752@0 {
 		compatible = "nxp,sc16is752";
 		reg = <0>;
-		spi-max-frequency = <1000000>;
+		spi-max-frequency = <24000000>;
 		clocks = <&sc_mstrclk>;
 		interrupt-parent = <&gpio4>;
 		interrupts = <7 IRQ_TYPE_EDGE_FALLING>;
@@ -767,7 +773,7 @@
 	sc16is752_1: sc16is752@1 {
 		compatible = "nxp,sc16is752";
 		reg = <1>;
-		spi-max-frequency = <1000000>;
+		spi-max-frequency = <24000000>;
 		clocks = <&sc_mstrclk>;
 		interrupt-parent = <&gpio4>;
 		interrupts = <11 IRQ_TYPE_EDGE_FALLING>;
@@ -778,7 +784,7 @@
 	sc16is752_2: sc16is752@2 {
 		compatible = "nxp,sc16is752";
 		reg = <2>;
-		spi-max-frequency = <1000000>;
+		spi-max-frequency = <24000000>;
 		clocks = <&sc_mstrclk>;
 		interrupt-parent = <&gpio2>;
 		interrupts = <19 IRQ_TYPE_EDGE_FALLING>;
@@ -789,7 +795,7 @@
 	sc16is752_3: sc16is752@3 {
 		compatible = "nxp,sc16is752";
 		reg = <3>;
-		spi-max-frequency = <1000000>;
+		spi-max-frequency = <24000000>;
 		clocks = <&sc_mstrclk>;
 		interrupt-parent = <&gpio3>;
 		interrupts = <7 IRQ_TYPE_EDGE_FALLING>;
