@@ -7,6 +7,8 @@ obj-$(CONFIG_DRM_OMAP_ENCODER_TC358768) += encoder-tc358768.o
 obj-$(CONFIG_DRM_OMAP_ENCODER_SII9022) += encoder-sii9022.o
 encoder-sii9022-y += encoder-sii9022-video.o
 encoder-sii9022-$(CONFIG_DRM_OMAP_ENCODER_SII9022_AUDIO_CODEC) += encoder-sii9022-audio.o
+obj-$(CONFIG_DRM_OMAP_ENCODER_ADV7513) += encoder-adv7513.o
+encoder-adv7513-y += encoder-adv7513-video.o
 obj-$(CONFIG_DRM_OMAP_CONNECTOR_DVI) += connector-dvi.o
 obj-$(CONFIG_DRM_OMAP_CONNECTOR_HDMI) += connector-hdmi.o
 obj-$(CONFIG_DRM_OMAP_CONNECTOR_ANALOG_TV) += connector-analog-tv.o
@@ -18,3 +20,4 @@ obj-$(CONFIG_DRM_OMAP_PANEL_SHARP_LS037V7DW01) += panel-sharp-ls037v7dw01.o
 obj-$(CONFIG_DRM_OMAP_PANEL_TPO_TD028TTEC1) += panel-tpo-td028ttec1.o
 obj-$(CONFIG_DRM_OMAP_PANEL_TPO_TD043MTEA1) += panel-tpo-td043mtea1.o
 obj-$(CONFIG_DRM_OMAP_PANEL_NEC_NL8048HL11) += panel-nec-nl8048hl11.o
+

@@ -1007,9 +1007,9 @@ static int adv7511_parse_dt(struct device_node *np,
 	config->embedded_sync = of_property_read_bool(np, "adi,embedded-sync");
 
 	/* Hardcode the sync pulse configurations for now. */
-	config->sync_pulse = ADV7511_INPUT_SYNC_PULSE_NONE;
-	config->vsync_polarity = ADV7511_SYNC_POLARITY_PASSTHROUGH;
-	config->hsync_polarity = ADV7511_SYNC_POLARITY_PASSTHROUGH;
+	config->sync_pulse = ADV7511_INPUT_SYNC_PULSE_DE;
+	config->vsync_polarity = ADV7511_SYNC_POLARITY_LOW;
+	config->hsync_polarity = ADV7511_SYNC_POLARITY_LOW;
 
 	return 0;
 }

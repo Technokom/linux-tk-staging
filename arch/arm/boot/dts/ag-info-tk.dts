@@ -23,7 +23,7 @@
 	compatible = "technokom,aginfo","ti,am4378","ti,am43";
 
 	aliases {
-		display0 = &lcd0;
+        display0 = &lcd0;
 	};
 
 
@@ -78,29 +78,30 @@
 		};
 	};
 
-	lcd0: display {
+
+    lcd0: display {
 		compatible = "osddisplays,osd057T0559-34ts", "panel-dpi";
 		label = "lcd";
-		
+
 		pinctrl-names = "default";
 		pinctrl-0 = <&dss_pin_enable>;
 		enable-gpios = <&gpio5 29 GPIO_ACTIVE_HIGH>;
 
 		panel-timing {
-			clock-frequency = <33000000>;
-			hactive = <800>;
-			vactive = <480>;
-			hfront-porch = <210>;
-			hback-porch = <16>;
-			hsync-len = <30>;
-			vback-porch = <10>;
-			vfront-porch = <22>;
-			vsync-len = <13>;
-			hsync-active = <0>;
-			vsync-active = <0>;
-			de-active = <1>;
-			pixelclk-active = <1>;
-		};
+            clock-frequency = <51206400>;
+            hactive = <1024>;
+            vactive = <768>;
+            hfront-porch = <24>;
+            hback-porch = <24>;
+            hsync-len = <136>;
+            vfront-porch = <3>;
+            vback-porch = <3>;
+            vsync-len = <6>;
+            hsync-active = <0>;
+            vsync-active = <0>;
+            de-active = <1>; /* AM572x only */
+            pixelclk-active=<1>; /* AM572X only */
+        };
 
 		port {
 			lcd_in: endpoint {
@@ -341,11 +342,9 @@
 		>;
 	};
 
-
-
 	dss_pins: dss_pins {
 		pinctrl-single,pins = <
-			AM4372_IOPAD(0x8a0, PIN_OUTPUT_PULLDOWN | MUX_MODE7)
+			AM4372_IOPAD(0x8a0, PIN_OUTPUT_PULLUP | MUX_MODE0)
 			AM4372_IOPAD(0x8a4, PIN_OUTPUT_PULLUP | MUX_MODE0)
 			AM4372_IOPAD(0x8a8, PIN_OUTPUT_PULLUP | MUX_MODE0)
 			AM4372_IOPAD(0x8ac, PIN_OUTPUT_PULLUP | MUX_MODE0)
@@ -369,14 +368,12 @@
 		>;
 	};
 
-	
-	dss_pin_enable: dss_pin_enable {
+    dss_pin_enable: dss_pin_enable {
 		pinctrl-single,pins = <
 			AM4372_IOPAD(0xa74, PIN_OUTPUT_PULLUP | MUX_MODE9)
 
 		>;
 	};
-
 
 	uart1_pins: uart1_pins {
 		pinctrl-single,pins = <
@@ -547,35 +544,41 @@
 	};
 
     adv7513: adv7513@39 {
-		compatible = "adi,adv7513";
+		compatible = "omapdss,adi,adv7513";
 		reg = <0x39>;
 
 		interrupt-parent = <&gpio4>;
 		interrupts = <17 IRQ_TYPE_EDGE_FALLING>;
 
-        pd = <&gpio4 20 GPIO_ACTIVE_LOW>;
+        pd-gpio = <&gpio4 20 GPIO_ACTIVE_HIGH>;
 
 		adi,input-depth = <8>;
 		adi,input-colorspace = "rgb";
 		adi,input-clock = "1x";
 		adi,input-style = <1>;
 		adi,input-justification = "evenly";
+		adi,embedded-sync;
 
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
 
-			port@0 {
-				reg = <0>;
-				adv7511_in: endpoint {
-					remote-endpoint = <&dpi_out>;
-				};
-			};
-
-		};
 	};
 
 };
+
+
+&dss {
+	status = "okay";
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&dss_pins>;
+
+	port {
+		dpi_out: endpoint@0 {
+			remote-endpoint = <&lcd_in>;
+			data-lines = <18>;
+		};
+	};
+};
+
 
 &spi0 {
 	pinctrl-names = "default";
@@ -824,20 +827,6 @@
     rs485-rts-active-high;
     rs485-rts-delay = <0 0>;
     linux,rs485-enabled-at-boot-time;
-};
-
-&dss {
-	status = "okay";
-
-	pinctrl-names = "default";
-	pinctrl-0 = <&dss_pins>;
-
-	port {
-		dpi_out: endpoint@0 {
-			remote-endpoint = <&adv7511_in>;
-			data-lines = <18>;
-		};
-	};
 };
 
 

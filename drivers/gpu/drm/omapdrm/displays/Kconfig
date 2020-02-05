@@ -31,6 +31,14 @@ config DRM_OMAP_ENCODER_TC358768
 	help
 	  Driver for Toshiba TC358768/TC358778 DPI to DSI encoder.
 
+
+config DRM_OMAP_ENCODER_ADV7513
+	tristate "ADV7513 HDMI Encoder"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Driver for Analog Devices ADV7513 HDMI encoder.
+
 config DRM_OMAP_ENCODER_SII9022
 	tristate "SiI9022 HDMI Encoder"
 	depends on I2C
