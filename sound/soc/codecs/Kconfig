@@ -911,15 +911,15 @@ config SND_SOC_TLV320AIC31XX
 	select REGMAP_I2C
 
 config SND_SOC_TLV320AIC32X4
-	tristate
+	tristate "Texas Instruments TLV320AIC32X4 CODECs"
 
 config SND_SOC_TLV320AIC32X4_I2C
-	tristate
+	tristate "Texas Instruments TLV320AIC32X4 CODECs I2C"
 	depends on I2C
 	select SND_SOC_TLV320AIC32X4
 
 config SND_SOC_TLV320AIC32X4_SPI
-	tristate
+	tristate "Texas Instruments TLV320AIC32X4 CODECs SPI"
 	depends on SPI_MASTER
 	select SND_SOC_TLV320AIC32X4
 
