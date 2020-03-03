@@ -68,13 +68,13 @@
 		compatible = "simple-audio-card";
 		simple-audio-card,name = "AM437x-TK";
 		simple-audio-card,widgets =
-			"Headphone", "Headphone Jack",
-			"Line", "Line In";
+            "Headphone", "Headphone Jack",
+            "Speaker", "Speaker";
 		simple-audio-card,routing =
-			"Headphone Jack",	"HPLOUT",
-			"Headphone Jack",	"HPROUT",
-			"LINE1L",		"Line In",
-			"LINE1R",		"Line In";
+			"Headphone Jack", "HPL",
+			"Headphone Jack", "HPR",
+			"Speaker", "LOL",
+			"Speaker", "LOR";
 		simple-audio-card,format = "dsp_b";
 		simple-audio-card,bitclock-master = <&sound_master>;
 		simple-audio-card,frame-master = <&sound_master>;
@@ -82,12 +82,12 @@
 
 		simple-audio-card,cpu {
 			sound-dai = <&mcasp1>;
-            system-clock-frequency = <12000000>;
+            system-clock-frequency = <24000000>;
 		};
 
 		sound_master: simple-audio-card,codec {
 			sound-dai = <&tlv320aic3106>;
-			system-clock-frequency = <12000000>;
+			system-clock-frequency = <24000000>;
 		};
     };
 
@@ -455,12 +455,15 @@
 		compatible = "ti,tlv320aic32x4";
 		reg = <0x18>;
 		status = "okay";
+	    clocks = <&audio_mstrclk>;
+	    clock-names = "mclk";
 
-		/* Regulators */
-		AVDD-supply = <&evm_v3_3d>;
-		IOVDD-supply = <&evm_v3_3d>;
-		DRVDD-supply = <&evm_v3_3d>;
-		DVDD-supply = <&ldo1>;
+        
+        iov-supply = <&evm_v3_3d>;
+        ldoin-supply = <&evm_v3_3d>;
+        dv-supply = <&evm_v3_3d>;
+        av-supply = <&evm_v3_3d>;
+
 	};
 
 

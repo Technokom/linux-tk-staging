@@ -462,6 +462,8 @@ static const struct snd_soc_dapm_widget aic32x4_dapm_widgets[] = {
 	SND_SOC_DAPM_INPUT("IN2_R"),
 	SND_SOC_DAPM_INPUT("IN3_L"),
 	SND_SOC_DAPM_INPUT("IN3_R"),
+    SND_SOC_DAPM_INPUT("CM_L"),
+	SND_SOC_DAPM_INPUT("CM_R"),
 };
 
 static const struct snd_soc_dapm_route aic32x4_dapm_routes[] = {
@@ -614,16 +616,16 @@ static int aic32x4_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 static int aic32x4_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
-	u8 iface_reg_1;
-	u8 iface_reg_2;
-	u8 iface_reg_3;
+	u8 iface_reg_1 = 0;
+	u8 iface_reg_2 = 0;
+	u8 iface_reg_3 = 0;
 
-	iface_reg_1 = snd_soc_read(codec, AIC32X4_IFACE1);
-	iface_reg_1 = iface_reg_1 & ~(3 << 6 | 3 << 2);
-	iface_reg_2 = snd_soc_read(codec, AIC32X4_IFACE2);
-	iface_reg_2 = 0;
-	iface_reg_3 = snd_soc_read(codec, AIC32X4_IFACE3);
-	iface_reg_3 = iface_reg_3 & ~(1 << 3);
+	//iface_reg_1 = snd_soc_read(codec, AIC32X4_IFACE1);
+	//iface_reg_1 = iface_reg_1 & ~(3 << 6 | 3 << 2);
+	//iface_reg_2 = snd_soc_read(codec, AIC32X4_IFACE2);
+	//iface_reg_2 = 0;
+	//iface_reg_3 = snd_soc_read(codec, AIC32X4_IFACE3);
+	//iface_reg_3 = iface_reg_3 & ~(1 << 3);
 
 	/* set master/slave audio interface */
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
@@ -854,6 +856,7 @@ static int aic32x4_set_bias_level(struct snd_soc_codec *codec,
 #define AIC32X4_RATES	SNDRV_PCM_RATE_8000_96000
 #define AIC32X4_FORMATS	(SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE \
 			 | SNDRV_PCM_FMTBIT_S24_3LE | SNDRV_PCM_FMTBIT_S32_LE)
+
 
 static const struct snd_soc_dai_ops aic32x4_ops = {
 	.hw_params = aic32x4_hw_params,
