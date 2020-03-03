@@ -616,16 +616,16 @@ static int aic32x4_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 static int aic32x4_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
-	u8 iface_reg_1 = 0;
-	u8 iface_reg_2 = 0;
-	u8 iface_reg_3 = 0;
+	u8 iface_reg_1;
+	u8 iface_reg_2;
+	u8 iface_reg_3;
 
-	//iface_reg_1 = snd_soc_read(codec, AIC32X4_IFACE1);
-	//iface_reg_1 = iface_reg_1 & ~(3 << 6 | 3 << 2);
-	//iface_reg_2 = snd_soc_read(codec, AIC32X4_IFACE2);
-	//iface_reg_2 = 0;
-	//iface_reg_3 = snd_soc_read(codec, AIC32X4_IFACE3);
-	//iface_reg_3 = iface_reg_3 & ~(1 << 3);
+	iface_reg_1 = snd_soc_read(codec, AIC32X4_IFACE1);
+	iface_reg_1 = iface_reg_1 & ~(3 << 6 | 3 << 2);
+	iface_reg_2 = snd_soc_read(codec, AIC32X4_IFACE2);
+	iface_reg_2 = 0;
+	iface_reg_3 = snd_soc_read(codec, AIC32X4_IFACE3);
+	iface_reg_3 = iface_reg_3 & ~(1 << 3);
 
 	/* set master/slave audio interface */
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
@@ -677,6 +677,8 @@ static int aic32x4_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_codec *codec = dai->codec;
 	struct aic32x4_priv *aic32x4 = snd_soc_codec_get_drvdata(codec);
 	u8 data;
+    u8 iface1_reg = 0;
+    u8 dacsetup_reg = 0;
 	int i;
 
 	i = aic32x4_get_divs(aic32x4->sysclk, params_rate(params));

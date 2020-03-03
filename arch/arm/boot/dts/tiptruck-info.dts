@@ -70,11 +70,14 @@
 		simple-audio-card,widgets =
             "Headphone", "Headphone Jack",
             "Speaker", "Speaker";
+            "Line", "Line In";
 		simple-audio-card,routing =
 			"Headphone Jack", "HPL",
 			"Headphone Jack", "HPR",
 			"Speaker", "LOL",
-			"Speaker", "LOR";
+			"Speaker", "LOR",
+			"CM_L", "Line In",
+			"CM_R", "Line In";
 		simple-audio-card,format = "dsp_b";
 		simple-audio-card,bitclock-master = <&sound_master>;
 		simple-audio-card,frame-master = <&sound_master>;
