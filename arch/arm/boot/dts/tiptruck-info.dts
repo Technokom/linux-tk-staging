@@ -69,15 +69,15 @@
 		simple-audio-card,name = "AM437x-TK";
 		simple-audio-card,widgets =
             "Headphone", "Headphone Jack",
+			"Line", "Line In",
             "Speaker", "Speaker";
-            "Line", "Line In";
 		simple-audio-card,routing =
 			"Headphone Jack", "HPL",
 			"Headphone Jack", "HPR",
-			"Speaker", "LOL",
-			"Speaker", "LOR",
 			"CM_L", "Line In",
-			"CM_R", "Line In";
+			"CM_R", "Line In",
+			"Speaker", "LOL",
+			"Speaker", "LOR";
 		simple-audio-card,format = "dsp_b";
 		simple-audio-card,bitclock-master = <&sound_master>;
 		simple-audio-card,frame-master = <&sound_master>;
@@ -419,13 +419,13 @@
 	spi2_pins: spi2_pins {
 		pinctrl-single,pins = <
             AM4372_IOPAD(0xa60, PIN_INPUT_PULLUP | MUX_MODE0) /* (N20) spi2_sclk.spi2_sclk */
-			AM4372_IOPAD(0xa64, PIN_INPUT_PULLUP | MUX_MODE0) /* (P22) spi2_d0.spi2_d0 */
-			AM4372_IOPAD(0xa68, PIN_INPUT_PULLUP | MUX_MODE0) /* (P20) spi2_d1.spi2_d1 */
-			AM4372_IOPAD(0xa6c, PIN_INPUT_PULLUP | MUX_MODE0) /* (T23) spi2_cs0.spi2_cs0 */
-			AM4372_IOPAD(0x9d8, PIN_INPUT_PULLUP | MUX_MODE4) /* (AC23) cam1_vd.spi2_cs2 */
+			AM4372_IOPAD(0xa64, PIN_INPUT | MUX_MODE0) /* (P22) spi2_d0.spi2_d0 */
+			AM4372_IOPAD(0xa68, PIN_INPUT | MUX_MODE0) /* (P20) spi2_d1.spi2_d1 */
+			AM4372_IOPAD(0xa6c, PIN_INPUT | MUX_MODE0) /* (T23) spi2_cs0.spi2_cs0 */
+			AM4372_IOPAD(0x9d8, PIN_INPUT | MUX_MODE4) /* (AC23) cam1_vd.spi2_cs2 */
 
-            AM4372_IOPAD(0xa44, PIN_INPUT_PULLUP | MUX_MODE7) /* (F23) gpio5_11.gpio5[11] brige 4*/
-            AM4372_IOPAD(0x89c, PIN_INPUT_PULLUP | MUX_MODE7) /* (C10) gpmc_be0n_cle.gpio2[5] brige 5*/
+            AM4372_IOPAD(0xa44, PIN_INPUT | MUX_MODE7) /* (F23) gpio5_11.gpio5[11] brige 4*/
+            AM4372_IOPAD(0x89c, PIN_INPUT | MUX_MODE7) /* (C10) gpmc_be0n_cle.gpio2[5] brige 5*/
 
 		>;
 	};
@@ -461,11 +461,8 @@
 	    clocks = <&audio_mstrclk>;
 	    clock-names = "mclk";
 
-        
         iov-supply = <&evm_v3_3d>;
         ldoin-supply = <&evm_v3_3d>;
-        dv-supply = <&evm_v3_3d>;
-        av-supply = <&evm_v3_3d>;
 
 	};
 
@@ -815,26 +812,19 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&spi2_pins>;
 	status = "okay";
-	ti,spi-num-cs = <2>;
+	ti,spi-num-cs = <3>;
 	ti,pindir-d0-out-d1-in;
 
 	can2: can@0 {
 		compatible = "microchip,mcp2515";
 		reg = <0>;
-        spi-max-frequency = <1000000>;
+        spi-max-frequency = <24000000>;
 		clocks = <&sc_mstrclk>;
 		interrupt-parent = <&gpio5>;
 		interrupts = <11 IRQ_TYPE_EDGE_FALLING>;
 	};
 
-	can3: can@1 {
-		compatible = "microchip,mcp2515";
-		reg = <1>;
-		clocks = <&sc_mstrclk>;
-        spi-max-frequency = <1000000>;
-		interrupt-parent = <&gpio2>;
-		interrupts = <5 IRQ_TYPE_EDGE_FALLING>;
-	};
+
 };
 
 &rtc {

@@ -314,6 +314,7 @@ static const struct aic32x4_rate_divs aic32x4_divs[] = {
 static const struct snd_kcontrol_new hpl_output_mixer_controls[] = {
 	SOC_DAPM_SINGLE("L_DAC Switch", AIC32X4_HPLROUTE, 3, 1, 0),
 	SOC_DAPM_SINGLE("IN1_L Switch", AIC32X4_HPLROUTE, 2, 1, 0),
+    SOC_DAPM_SINGLE("L_DAC_Diff Switch", AIC32X4_HPRROUTE, 0, 1, 0),
 };
 
 static const struct snd_kcontrol_new hpr_output_mixer_controls[] = {
@@ -323,6 +324,7 @@ static const struct snd_kcontrol_new hpr_output_mixer_controls[] = {
 
 static const struct snd_kcontrol_new lol_output_mixer_controls[] = {
 	SOC_DAPM_SINGLE("L_DAC Switch", AIC32X4_LOLROUTE, 3, 1, 0),
+    SOC_DAPM_SINGLE("L_DAC_Diff Switch", AIC32X4_LOLROUTE, 0, 1, 0),
 };
 
 static const struct snd_kcontrol_new lor_output_mixer_controls[] = {
