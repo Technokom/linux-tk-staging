@@ -424,8 +424,8 @@
 			AM4372_IOPAD(0xa6c, PIN_INPUT | MUX_MODE0) /* (T23) spi2_cs0.spi2_cs0 */
 			AM4372_IOPAD(0x9d8, PIN_INPUT | MUX_MODE4) /* (AC23) cam1_vd.spi2_cs2 */
 
-            AM4372_IOPAD(0xa44, PIN_INPUT | MUX_MODE7) /* (F23) gpio5_11.gpio5[11] brige 4*/
-            AM4372_IOPAD(0x89c, PIN_INPUT | MUX_MODE7) /* (C10) gpmc_be0n_cle.gpio2[5] brige 5*/
+            AM4372_IOPAD(0xa44, PIN_INPUT_PULLUP | MUX_MODE7) /* (F23) gpio5_11.gpio5[11] brige 4*/
+            AM4372_IOPAD(0x89c, PIN_INPUT_PULLUP | MUX_MODE7) /* (C10) gpmc_be0n_cle.gpio2[5] brige 5*/
 
 		>;
 	};
@@ -816,7 +816,7 @@
 	ti,pindir-d0-out-d1-in;
 
 	can2: can@0 {
-		compatible = "microchip,mcp2515";
+		compatible = "microchip,mcp2517fd";
 		reg = <0>;
         spi-max-frequency = <24000000>;
 		clocks = <&sc_mstrclk>;
