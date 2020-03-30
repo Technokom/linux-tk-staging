@@ -217,9 +217,9 @@ static int adv7513_parse_dt(struct device_node *np, struct adv7511_link_config *
     config->embedded_sync = of_property_read_bool(np, "adi,embedded-sync");
 
     /* Hardcode the sync pulse configurations for now. */
-    config->sync_pulse = ADV7511_INPUT_SYNC_PULSE_DE;
-    config->vsync_polarity = ADV7511_SYNC_POLARITY_LOW;
-    config->hsync_polarity = ADV7511_SYNC_POLARITY_LOW;
+	config->sync_pulse = ADV7511_INPUT_SYNC_PULSE_DE;
+	config->vsync_polarity = ADV7511_SYNC_POLARITY_LOW;
+	config->hsync_polarity = ADV7511_SYNC_POLARITY_LOW;
 
     return 0;
 }
@@ -283,6 +283,8 @@ static void adv7511_hpd_work(struct work_struct *work)
     unsigned int val;
     int ret;
 
+
+
     ret = regmap_read(adv7511->regmap, ADV7511_REG_STATUS, &val);
     if (ret < 0)
         status = connector_status_disconnected;
@@ -329,7 +331,6 @@ static int adv7511_irq_process(struct adv7511 *adv7511, bool process_hpd)
 
     if (process_hpd && irq0 & ADV7511_INT0_HPD) {
         schedule_work(&adv7511->hpd_work);
-        printk ("HPD int\n");
     }
 
     if (irq0 & ADV7511_INT0_EDID_READY || irq1 & ADV7511_INT1_DDC_ERROR) {
@@ -457,15 +458,15 @@ static int adv7511_get_modes(struct adv7511 *adv7511, struct drm_connector *conn
     if (!adv7511->powered)
         __adv7511_power_off(adv7511);
 
-    kfree(adv7511->edid);
-    adv7511->edid = edid;
+    //kfree(adv7511->edid);
+    //adv7511->edid = edid;
     if (!edid)
         return 0;
 
     drm_mode_connector_update_edid_property(connector, edid);
     count = drm_add_edid_modes(connector, edid);
 
-    adv7511_set_config_csc(adv7511, connector, adv7511->rgb);
+    //adv7511_set_config_csc(adv7511, connector, adv7511->rgb);
 
     return count;
 }
@@ -475,8 +476,6 @@ static irqreturn_t adv7511_irq_handler(int irq, void *devid)
 {
     struct adv7511 *adv7511 = devid;
     int ret;
-
-    printk ("int\n");
 
     ret = adv7511_irq_process(adv7511, true);
     return ret < 0 ? IRQ_NONE : IRQ_HANDLED;
@@ -554,7 +553,7 @@ static int adv7511_init_regulators(struct adv7511 *adv)
     return regulator_bulk_enable(adv->num_supplies, adv->supplies);
 }
 
-
+/*
 static const struct omapdss_hdmi_ops adv7513_hdmi_ops = {
         .connect		= adv7513_connect,
         .disconnect		= adv7513_disconnect,
@@ -575,7 +574,7 @@ static const struct omapdss_hdmi_ops adv7513_hdmi_ops = {
         .set_hdmi_mode		= adv7513_set_hdmi_mode,
         .set_infoframe		= adv7513_set_infoframe,
 };
-
+*/
 
 
 static int adv7513_probe(struct i2c_client *client, const struct i2c_device_id *id)
@@ -634,8 +633,8 @@ static int adv7513_probe(struct i2c_client *client, const struct i2c_device_id *
         if (ret) {
             goto err_reg;
         }
-        printk ("init int\n");
     }
+
 
 
     ddata->regmap = devm_regmap_init_i2c(client, &adv7511_regmap_config);
@@ -644,24 +643,22 @@ static int adv7513_probe(struct i2c_client *client, const struct i2c_device_id *
         goto err_reg;
     }
 
+
+
     ret = regmap_read(ddata->regmap, ADV7511_REG_CHIP_REVISION, &val);
     if (ret) {
         goto err_reg;
     }
     dev_dbg(dev, "Rev. %d\n", val);
 
-    adv7511_power_on(ddata);
 
+    adv7511_power_on(ddata);
 
     ret = regmap_register_patch(ddata->regmap, adv7511_fixed_registers, ARRAY_SIZE(adv7511_fixed_registers));
 
     if (ret) {
         goto err_reg;
     }
-
-
-
-
 
     regmap_write(ddata->regmap, ADV7511_REG_HDCP_HDMI_CFG, 0x82);
 
@@ -687,7 +684,7 @@ static int adv7513_probe(struct i2c_client *client, const struct i2c_device_id *
 
 
 
-    //adv7511_power_off(ddata);
+    adv7511_power_off(ddata);
 
 
 
@@ -700,6 +697,8 @@ static int adv7513_probe(struct i2c_client *client, const struct i2c_device_id *
 
     adv7511_power_on(ddata);
 
+    ret = adv7511_irq_process(ddata, false);
+
     dssdev = &ddata->dssdev;
     dssdev->dev = &client->dev;
     //dssdev->ops.hdmi = &sii9022_hdmi_ops;
@@ -708,16 +707,12 @@ static int adv7513_probe(struct i2c_client *client, const struct i2c_device_id *
     dssdev->owner = THIS_MODULE;
     dssdev->port_num = 1;
 
-/*
+
     ret = omapdss_register_output(dssdev);
     if (ret) {
         dev_err(&client->dev, "Failed to register output\n");
         goto err_reg;
     }
-*/
-
-    printk ("!!!!!! adv7513 ready !!!!!!!");
-
 
 
     return 0;
