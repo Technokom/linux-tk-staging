@@ -1,25 +1,11 @@
-/*
- * Copyright (C) 2017 Texas Instruments Incorporated - http://www.ti.com
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- */
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (C) 2017 Texas Instruments Incorporated - http://www.ti.com */
 
 #include <linux/debugfs.h>
 #include <linux/string.h>
 #include <linux/spinlock_types.h>
 #include "prueth_node_tbl.h"
 #include "hsr_prp_firmware.h"
-
-#define IND_BINOFS(x) nt->index_array->index_tbl[x].bin_offset
-#define IND_BIN_NO(x) nt->index_array->index_tbl[x].bin_no_entries
-#define BIN_NODEOFS(x) nt->bin_array->bin_tbl[x].node_tbl_offset
 
 static void pru2host_mac(u8 *mac)
 {
@@ -186,18 +172,18 @@ void node_table_update_time(struct node_tbl *nt)
 	int j;
 	u16 ofs;
 	struct nt_array_t *nt_arr = nt->nt_array;
-	struct node_tbl_t node;
+	struct node_tbl_t *node;
 
 	for (j = 0; j < nt->bin_array_max_entries; j++) {
 		ofs = nt->bin_array->bin_tbl[j].node_tbl_offset;
 		if (ofs < nt->nt_array_max_entries) {
-			node = nt_arr->node_tbl[ofs];
-			inc_time(&node.time_last_seen_a);
-			inc_time(&node.time_last_seen_b);
+			node = &nt_arr->node_tbl[ofs];
+			inc_time(&node->time_last_seen_a);
+			inc_time(&node->time_last_seen_b);
 			/* increment time_last_seen_s if nod is not SAN */
-			if ((node.status &
+			if ((node->status &
 			     NT_REM_NODE_TYPE_SANAB) == 0)
-				inc_time(&node.time_last_seen_s);
+				inc_time(&node->time_last_seen_s);
 		}
 	}
 }
@@ -446,93 +432,3 @@ void pop_queue_process(struct prueth *prueth, spinlock_t *lock)
 	while (pop_queue(prueth, lock) == 0)
 		;
 }
-
-/* indexes */
-static int
-prueth_nt_index_show(struct seq_file *sfp, void *data)
-{
-	struct node_tbl *nt = (struct node_tbl *)sfp->private;
-	int j;
-	int cnt_i = 0;
-	int cnt_b = 0;
-
-	for (j = 0; j < nt->index_array_max_entries; j++)
-		if ((IND_BINOFS(j) < nt->bin_array_max_entries) &&
-		    (IND_BIN_NO(j) > 0)) {
-			seq_printf(sfp, "%3d; ofs %3d; no %3d\n", j,
-				   IND_BINOFS(j), IND_BIN_NO(j));
-			cnt_i++;
-			cnt_b += IND_BIN_NO(j);
-		}
-
-	seq_printf(sfp, "\nTotal indexes %d; bins %d;  lre_cnt %d\n",
-		   cnt_i, cnt_b, nt->nt_lre_cnt->lre_cnt);
-
-	return 0;
-}
-
-static int
-prueth_nt_index_open(struct inode *inode, struct file *filp)
-{
-	return single_open(filp, prueth_nt_index_show,
-			   inode->i_private);
-}
-
-const struct file_operations prueth_nt_index_fops = {
-	.owner	= THIS_MODULE,
-	.open	= prueth_nt_index_open,
-	.read	= seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-
-/* bins */
-static int
-prueth_nt_bins_show(struct seq_file *sfp, void *data)
-{
-	struct node_tbl *nt = (struct node_tbl *)sfp->private;
-	int j, o;
-	int cnt = 0;
-
-	for (j = 0; j < nt->bin_array_max_entries; j++)
-		if (nt->bin_array->bin_tbl[j].node_tbl_offset <
-		    nt->nt_array_max_entries) {
-			o = nt->bin_array->bin_tbl[j].node_tbl_offset;
-			seq_printf(sfp, "%3d; ofs %3d; %02x-%02x-%02x-%02x-%02x-%02x %02x %02x ra %4d; rb %4d; s%5d; a%5d; b%5d\n",
-				   j, nt->bin_array->bin_tbl[j].node_tbl_offset,
-				   nt->bin_array->bin_tbl[j].src_mac_id[3],
-				   nt->bin_array->bin_tbl[j].src_mac_id[2],
-				   nt->bin_array->bin_tbl[j].src_mac_id[1],
-				   nt->bin_array->bin_tbl[j].src_mac_id[0],
-				   nt->bin_array->bin_tbl[j].src_mac_id[5],
-				   nt->bin_array->bin_tbl[j].src_mac_id[4],
-				   nt->nt_array->node_tbl[o].entry_state,
-				   nt->nt_array->node_tbl[o].status,
-				   nt->nt_array->node_tbl[o].cnt_ra,
-				   nt->nt_array->node_tbl[o].cnt_rb,
-				   nt->nt_array->node_tbl[o].time_last_seen_s,
-				   nt->nt_array->node_tbl[o].time_last_seen_a,
-				   nt->nt_array->node_tbl[o].time_last_seen_b
-				   );
-			cnt++;
-		}
-	seq_printf(sfp, "\nTotal valid entries %d; lre_cnt %d\n",
-		   cnt, nt->nt_lre_cnt->lre_cnt);
-
-	return 0;
-}
-
-static int
-prueth_nt_bins_open(struct inode *inode, struct file *filp)
-{
-	return single_open(filp, prueth_nt_bins_show,
-			   inode->i_private);
-}
-
-const struct file_operations prueth_nt_bins_fops = {
-	.owner	= THIS_MODULE,
-	.open	= prueth_nt_bins_open,
-	.read	= seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
-};

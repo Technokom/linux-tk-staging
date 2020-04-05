@@ -7,9 +7,9 @@
 #ifndef __TIDSS_CRTC_H__
 #define __TIDSS_CRTC_H__
 
-#include <linux/wait.h>
-#include <linux/completion.h>
 #include <drm/drm_crtc.h>
+#include <linux/completion.h>
+#include <linux/wait.h>
 
 #include "tidss_dispc.h"
 
@@ -36,14 +36,10 @@ struct tidss_crtc_state {
 
 	u32 bus_format;
 	u32 bus_flags;
-
-	uint64_t trans_key_mode;
-	uint64_t trans_key;
-	uint64_t background_color;
 };
 
 struct tidss_crtc *tidss_crtc_create(struct tidss_device *tidss, u32 hw_videoport,
-				     struct drm_plane *primary, struct device_node *epnode);
+				     struct drm_plane *primary);
 
 
 void tidss_crtc_vblank_irq(struct drm_crtc *crtc);

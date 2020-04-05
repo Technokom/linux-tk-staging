@@ -20,7 +20,7 @@ config PHY_DM816X_USB
 	help
 	  Enable this for dm816x USB to work.
 
-config PHY_AM654
+config PHY_AM654_SERDES
 	tristate "TI AM654 SERDES support"
 	depends on OF && ARCH_K3 || COMPILE_TEST
 	depends on COMMON_CLK
@@ -31,6 +31,21 @@ config PHY_AM654
 	help
 	  This option enables support for TI AM654 SerDes PHY used for
 	  PCIe.
+
+config PHY_J721E_WIZ
+	tristate "TI J721E WIZ (SERDES Wrapper) support"
+	depends on OF && ARCH_K3 || COMPILE_TEST
+	depends on COMMON_CLK
+	select GENERIC_PHY
+	select MULTIPLEXER
+	select REGMAP_MMIO
+	select MUX_MMIO
+	help
+	  This option enables support for WIZ module present in TI's J721E
+	  SoC. WIZ is a serdes wrapper used to configure some of the input
+	  signals to the SERDES (Sierra/Torrent). This driver configures
+	  three clock selects (pll0, pll1, dig) and resets for each of the
+	  lanes.
 
 config OMAP_CONTROL_PHY
 	tristate "OMAP CONTROL PHY Driver"
@@ -94,10 +109,3 @@ config PHY_TI_KEYSTONE_SERDES
 	help
 	  This option enables support for TI Keystone SerDes PHY found
 	  in peripherals GBE, 10GBE and PCIe.
-
-config PHY_AM654_MMC
-	tristate "TI AM654 MMC PHY Support"
-	select GENERIC_PHY
-	help
-	  This option enables support for the Physical layer for MMC host
-	  controllers present on TI AM654 SOCs.

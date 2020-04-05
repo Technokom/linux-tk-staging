@@ -1670,7 +1670,7 @@ static int omap_iommu_add_device(struct device *dev)
 	if (num_iommus < 0)
 		return 0;
 
-	arch_data = kzalloc((num_iommus + 1) * sizeof(*arch_data), GFP_KERNEL);
+	arch_data = kcalloc(num_iommus + 1, sizeof(*arch_data), GFP_KERNEL);
 	if (!arch_data)
 		return -ENOMEM;
 
@@ -1751,7 +1751,7 @@ static struct iommu_group *omap_iommu_device_group(struct device *dev)
 	struct iommu_group *group = ERR_PTR(-EINVAL);
 
 	if (arch_data->iommu_dev)
-		group = arch_data->iommu_dev->group;
+		group = iommu_group_ref_get(arch_data->iommu_dev->group);
 
 	return group;
 }
@@ -1763,7 +1763,6 @@ static const struct iommu_ops omap_iommu_ops = {
 	.detach_dev	= omap_iommu_detach_dev,
 	.map		= omap_iommu_map,
 	.unmap		= omap_iommu_unmap,
-	.map_sg		= default_iommu_map_sg,
 	.iova_to_phys	= omap_iommu_iova_to_phys,
 	.add_device	= omap_iommu_add_device,
 	.remove_device	= omap_iommu_remove_device,
@@ -1774,7 +1773,7 @@ static const struct iommu_ops omap_iommu_ops = {
 static int __init omap_iommu_init(void)
 {
 	struct kmem_cache *p;
-	const unsigned long flags = SLAB_HWCACHE_ALIGN;
+	const slab_flags_t flags = SLAB_HWCACHE_ALIGN;
 	size_t align = 1 << 10; /* L2 pagetable alignement */
 	struct device_node *np;
 	int ret;

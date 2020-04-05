@@ -12,6 +12,7 @@
  * published by the Free Software Foundation.
  */
 
+#include <linux/cpu_pm.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
@@ -30,6 +31,7 @@
 #include "prcm44xx.h"
 #include "prminst44xx.h"
 #include "powerdomain.h"
+#include "pm.h"
 
 /* Static data */
 
@@ -50,8 +52,6 @@ static struct omap_prcm_irq_setup omap4_prcm_irq_setup = {
 	.nr_regs		= 2,
 	.irqs			= omap4_prcm_irqs,
 	.nr_irqs		= ARRAY_SIZE(omap4_prcm_irqs),
-	.irq			= 11 + OMAP44XX_IRQ_GIC_START,
-	.xlate_irq		= omap4_xlate_irq,
 	.read_pending_irqs	= &omap44xx_prm_read_pending_irqs,
 	.ocp_barrier		= &omap44xx_prm_ocp_barrier,
 	.save_and_clear_irqen	= &omap44xx_prm_save_and_clear_irqen,
@@ -351,7 +351,7 @@ static void omap44xx_prm_reconfigure_io_chain(void)
  * to occur, WAKEUPENABLE bits must be set in the pad mux registers, and
  * omap44xx_prm_reconfigure_io_chain() must be called.  No return value.
  */
-static void __init omap44xx_prm_enable_io_wakeup(void)
+static void omap44xx_prm_enable_io_wakeup(void)
 {
 	s32 inst = omap4_prmst_get_prm_dev_inst();
 
@@ -748,7 +748,7 @@ struct pwrdm_ops omap4_pwrdm_operations = {
 
 static int omap44xx_prm_late_init(void);
 
-void am43xx_prm_save_context(void)
+void prm_save_context(void)
 {
 	omap_prm_context.irq_enable =
 			omap4_prm_read_inst_reg(AM43XX_PRM_OCP_SOCKET_INST,
@@ -759,7 +759,7 @@ void am43xx_prm_save_context(void)
 						omap4_prcm_irq_setup.pm_ctrl);
 }
 
-void am43xx_prm_restore_context(void)
+void prm_restore_context(void)
 {
 	omap4_prm_write_inst_reg(omap_prm_context.irq_enable,
 				 OMAP4430_PRM_OCP_SOCKET_INST,
@@ -768,6 +768,22 @@ void am43xx_prm_restore_context(void)
 	omap4_prm_write_inst_reg(omap_prm_context.pm_ctrl,
 				 AM43XX_PRM_DEVICE_INST,
 				 omap4_prcm_irq_setup.pm_ctrl);
+}
+
+static int cpu_notifier(struct notifier_block *nb, unsigned long cmd, void *v)
+{
+	switch (cmd) {
+	case CPU_CLUSTER_PM_ENTER:
+		if (enable_off_mode)
+			prm_save_context();
+		break;
+	case CPU_CLUSTER_PM_EXIT:
+		if (enable_off_mode)
+			prm_restore_context();
+		break;
+	}
+
+	return NOTIFY_OK;
 }
 
 /*
@@ -790,6 +806,7 @@ static const struct omap_prcm_init_data *prm_init_data;
 
 int __init omap44xx_prm_init(const struct omap_prcm_init_data *data)
 {
+	static struct notifier_block nb;
 	omap_prm_base_init();
 
 	prm_init_data = data;
@@ -811,6 +828,12 @@ int __init omap44xx_prm_init(const struct omap_prcm_init_data *data)
 		omap4_prcm_irq_setup.mask = AM43XX_PRM_IRQENABLE_MPU_OFFSET;
 	}
 
+	/* Only AM43XX can lose prm context during rtc-ddr suspend */
+	if (soc_is_am43xx()) {
+		nb.notifier_call = cpu_notifier;
+		cpu_pm_register_notifier(&nb);
+	}
+
 	return prm_register(&omap44xx_prm_ll_data);
 }
 
@@ -822,23 +845,10 @@ static int omap44xx_prm_late_init(void)
 		return 0;
 
 	irq_num = of_irq_get(prm_init_data->np, 0);
-	/*
-	 * Already have OMAP4 IRQ num. For all other platforms, we need
-	 * IRQ numbers from DT
-	 */
-	if (irq_num <= 0 && !(prm_init_data->flags & PRM_IRQ_DEFAULT)) {
-		if (irq_num == -EPROBE_DEFER)
-			return irq_num;
+	if (irq_num == -EPROBE_DEFER)
+		return irq_num;
 
-		/* Have nothing to do */
-		return 0;
-	}
-
-	/* Once OMAP4 DT is filled as well */
-	if (irq_num > 0) {
-		omap4_prcm_irq_setup.irq = irq_num;
-		omap4_prcm_irq_setup.xlate_irq = NULL;
-	}
+	omap4_prcm_irq_setup.irq = irq_num;
 
 	omap44xx_prm_enable_io_wakeup();
 

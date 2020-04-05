@@ -204,6 +204,7 @@ enum {
 	TI_CLKM_PRM,
 	TI_CLKM_SCRM,
 	TI_CLKM_CTRL,
+	TI_CLKM_CTRL_AUX,
 	TI_CLKM_PLLSS,
 	CLK_MAX_MEMMAPS
 };
@@ -290,6 +291,7 @@ struct ti_clk_features {
 #define TI_CLK_DPLL4_DENY_REPROGRAM		BIT(1)
 #define TI_CLK_DISABLE_CLKDM_CONTROL		BIT(2)
 #define TI_CLK_ERRATA_I810			BIT(3)
+#define TI_CLK_DEVICE_TYPE_GP			BIT(4)
 
 void ti_clk_setup_features(struct ti_clk_features *features);
 const struct ti_clk_features *ti_clk_get_features(void);

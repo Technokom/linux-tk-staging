@@ -7,6 +7,7 @@
  */
 
 #include "dra72-evm-common.dtsi"
+#include "dra7-mmc-iodelay.dtsi"
 #include "dra72x-mmc-iodelay.dtsi"
 #include <dt-bindings/net/ti-dp83867.h>
 
@@ -298,6 +299,14 @@
 	vdda_video-supply = <&lp8732_ldo1_reg>;
 };
 
+&extcon_usb1 {
+	vbus-gpio = <&pcf_lcd 14 GPIO_ACTIVE_HIGH>;
+};
+
+&extcon_usb2 {
+	vbus-gpio = <&pcf_lcd 15 GPIO_ACTIVE_HIGH>;
+};
+
 &ipu2 {
 	status = "okay";
 	memory-region = <&ipu2_memory_region>;
@@ -311,12 +320,4 @@
 &dsp1 {
 	status = "okay";
 	memory-region = <&dsp1_memory_region>;
-};
-
-&extcon_usb1 {
-	vbus-gpio = <&pcf_lcd 14 GPIO_ACTIVE_HIGH>;
-};
-
-&extcon_usb2 {
-	vbus-gpio = <&pcf_lcd 15 GPIO_ACTIVE_HIGH>;
 };

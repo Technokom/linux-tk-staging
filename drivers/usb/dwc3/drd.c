@@ -1,24 +1,14 @@
+// SPDX-License-Identifier: GPL-2.0
 /**
  * drd.c - DesignWare USB3 DRD Controller Dual-role support
  *
  * Copyright (C) 2017 Texas Instruments Incorporated - http://www.ti.com
  *
  * Authors: Roger Quadros <rogerq@ti.com>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2  of
- * the License as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include <linux/extcon.h>
+#include <linux/of_graph.h>
 #include <linux/platform_device.h>
 
 #include "debug.h"
@@ -450,17 +440,38 @@ static int dwc3_drd_notifier(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
+static struct extcon_dev *dwc3_get_extcon(struct dwc3 *dwc)
+{
+	struct device *dev = dwc->dev;
+	struct device_node *np_phy, *np_conn;
+	struct extcon_dev *edev;
+
+	if (of_property_read_bool(dev->of_node, "extcon"))
+		return extcon_get_edev_by_phandle(dwc->dev, 0);
+
+	np_phy = of_parse_phandle(dev->of_node, "phys", 0);
+	np_conn = of_graph_get_remote_node(np_phy, -1, -1);
+
+	if (np_conn)
+		edev = extcon_find_edev_by_node(np_conn);
+	else
+		edev = NULL;
+
+	of_node_put(np_conn);
+	of_node_put(np_phy);
+
+	return edev;
+}
+
 int dwc3_drd_init(struct dwc3 *dwc)
 {
 	int ret, irq;
 
-	if (dwc->dev->of_node &&
-	    of_property_read_bool(dwc->dev->of_node, "extcon")) {
-		dwc->edev = extcon_get_edev_by_phandle(dwc->dev, 0);
+	dwc->edev = dwc3_get_extcon(dwc);
+	if (IS_ERR(dwc->edev))
+		return PTR_ERR(dwc->edev);
 
-		if (IS_ERR(dwc->edev))
-			return PTR_ERR(dwc->edev);
-
+	if (dwc->edev) {
 		dwc->edev_nb.notifier_call = dwc3_drd_notifier;
 		ret = extcon_register_notifier(dwc->edev, EXTCON_USB_HOST,
 					       &dwc->edev_nb);

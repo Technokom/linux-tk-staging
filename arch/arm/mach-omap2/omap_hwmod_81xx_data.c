@@ -954,6 +954,7 @@ static struct omap_hwmod_ocp_if dm816x_l4_hs__emac1 = {
 };
 
 static struct omap_hwmod_class_sysconfig dm81xx_sata_sysc = {
+	.rev_offs	= 0x00fc,
 	.sysc_offs	= 0x1100,
 	.sysc_flags	= SYSC_HAS_SIDLEMODE,
 	.idlemodes	= SIDLE_FORCE,
@@ -967,7 +968,7 @@ static struct omap_hwmod_class dm81xx_sata_hwmod_class = {
 
 static struct omap_hwmod dm81xx_sata_hwmod = {
 	.name		= "sata",
-	.clkdm_name	= "default_sata_clkdm",
+	.clkdm_name	= "default_clkdm",
 	.flags		= HWMOD_NO_IDLEST,
 	.prcm = {
 		.omap4 = {
@@ -1233,15 +1234,6 @@ static struct omap_hwmod_ocp_if dm81xx_alwon_l3_fast__tpcc = {
 	.user		= OCP_USER_MPU,
 };
 
-static struct omap_hwmod_addr_space dm81xx_tptc0_addr_space[] = {
-	{
-		.pa_start	= 0x49800000,
-		.pa_end		= 0x49800000 + SZ_8K - 1,
-		.flags		= ADDR_TYPE_RT,
-	},
-	{ },
-};
-
 static struct omap_hwmod_class dm81xx_tptc0_hwmod_class = {
 	.name		= "tptc0",
 };
@@ -1263,7 +1255,6 @@ static struct omap_hwmod_ocp_if dm81xx_alwon_l3_fast__tptc0 = {
 	.master		= &dm81xx_alwon_l3_fast_hwmod,
 	.slave		= &dm81xx_tptc0_hwmod,
 	.clk		= "sysclk4_ck",
-	.addr		= dm81xx_tptc0_addr_space,
 	.user		= OCP_USER_MPU,
 };
 
@@ -1271,17 +1262,7 @@ static struct omap_hwmod_ocp_if dm81xx_tptc0__alwon_l3_fast = {
 	.master		= &dm81xx_tptc0_hwmod,
 	.slave		= &dm81xx_alwon_l3_fast_hwmod,
 	.clk		= "sysclk4_ck",
-	.addr		= dm81xx_tptc0_addr_space,
 	.user		= OCP_USER_MPU,
-};
-
-static struct omap_hwmod_addr_space dm81xx_tptc1_addr_space[] = {
-	{
-		.pa_start	= 0x49900000,
-		.pa_end		= 0x49900000 + SZ_8K - 1,
-		.flags		= ADDR_TYPE_RT,
-	},
-	{ },
 };
 
 static struct omap_hwmod_class dm81xx_tptc1_hwmod_class = {
@@ -1305,7 +1286,6 @@ static struct omap_hwmod_ocp_if dm81xx_alwon_l3_fast__tptc1 = {
 	.master		= &dm81xx_alwon_l3_fast_hwmod,
 	.slave		= &dm81xx_tptc1_hwmod,
 	.clk		= "sysclk4_ck",
-	.addr		= dm81xx_tptc1_addr_space,
 	.user		= OCP_USER_MPU,
 };
 
@@ -1313,17 +1293,7 @@ static struct omap_hwmod_ocp_if dm81xx_tptc1__alwon_l3_fast = {
 	.master		= &dm81xx_tptc1_hwmod,
 	.slave		= &dm81xx_alwon_l3_fast_hwmod,
 	.clk		= "sysclk4_ck",
-	.addr		= dm81xx_tptc1_addr_space,
 	.user		= OCP_USER_MPU,
-};
-
-static struct omap_hwmod_addr_space dm81xx_tptc2_addr_space[] = {
-	{
-		.pa_start	= 0x49a00000,
-		.pa_end		= 0x49a00000 + SZ_8K - 1,
-		.flags		= ADDR_TYPE_RT,
-	},
-	{ },
 };
 
 static struct omap_hwmod_class dm81xx_tptc2_hwmod_class = {
@@ -1347,7 +1317,6 @@ static struct omap_hwmod_ocp_if dm81xx_alwon_l3_fast__tptc2 = {
 	.master		= &dm81xx_alwon_l3_fast_hwmod,
 	.slave		= &dm81xx_tptc2_hwmod,
 	.clk		= "sysclk4_ck",
-	.addr		= dm81xx_tptc2_addr_space,
 	.user		= OCP_USER_MPU,
 };
 
@@ -1355,17 +1324,7 @@ static struct omap_hwmod_ocp_if dm81xx_tptc2__alwon_l3_fast = {
 	.master		= &dm81xx_tptc2_hwmod,
 	.slave		= &dm81xx_alwon_l3_fast_hwmod,
 	.clk		= "sysclk4_ck",
-	.addr		= dm81xx_tptc2_addr_space,
 	.user		= OCP_USER_MPU,
-};
-
-static struct omap_hwmod_addr_space dm81xx_tptc3_addr_space[] = {
-	{
-		.pa_start	= 0x49b00000,
-		.pa_end		= 0x49b00000 + SZ_8K - 1,
-		.flags		= ADDR_TYPE_RT,
-	},
-	{ },
 };
 
 static struct omap_hwmod_class dm81xx_tptc3_hwmod_class = {
@@ -1389,7 +1348,6 @@ static struct omap_hwmod_ocp_if dm81xx_alwon_l3_fast__tptc3 = {
 	.master		= &dm81xx_alwon_l3_fast_hwmod,
 	.slave		= &dm81xx_tptc3_hwmod,
 	.clk		= "sysclk4_ck",
-	.addr		= dm81xx_tptc3_addr_space,
 	.user		= OCP_USER_MPU,
 };
 
@@ -1397,7 +1355,6 @@ static struct omap_hwmod_ocp_if dm81xx_tptc3__alwon_l3_fast = {
 	.master		= &dm81xx_tptc3_hwmod,
 	.slave		= &dm81xx_alwon_l3_fast_hwmod,
 	.clk		= "sysclk4_ck",
-	.addr		= dm81xx_tptc3_addr_space,
 	.user		= OCP_USER_MPU,
 };
 

@@ -101,6 +101,8 @@ struct dispc_device {
 	struct clk *fclk;
 	struct clk *vp_clk;
 
+	u32 memory_bandwidth_limit;
+
 	bool is_enabled;
 
 	u32 gamma_table[DISPC6_GAMMA_TABLE_SIZE];
@@ -224,7 +226,7 @@ static u32 dispc6_vp_irq_to_raw(u64 vpstat)
 
 static u64 dispc6_vid_irq_from_raw(u32 stat)
 {
-	uint plane = 0;
+	u32 plane = 0;
 	u64 vid_stat = 0;
 
 	if (stat & BIT(0))
@@ -235,7 +237,7 @@ static u64 dispc6_vid_irq_from_raw(u32 stat)
 
 static u32 dispc6_vid_irq_to_raw(u64 vidstat)
 {
-	uint plane = 0;
+	u32 plane = 0;
 	u32 stat = 0;
 
 	if (vidstat & DSS_IRQ_PLANE_FIFO_UNDERFLOW(plane))
@@ -325,7 +327,7 @@ static u64 dispc6_read_and_clear_irqstatus(struct dispc_device *dispc)
 {
 	u64 stat = 0;
 
-	// always clear the top level irqstatus
+	/* always clear the top level irqstatus */
 	dispc6_write(dispc, DISPC_IRQSTATUS,
 		     dispc6_read(dispc, DISPC_IRQSTATUS));
 
@@ -391,16 +393,17 @@ static void dispc6_set_num_datalines(struct dispc_device *dispc,
 }
 
 static void dispc6_vp_enable(struct dispc_device *dispc, u32 hw_videoport,
-			     const struct drm_display_mode *mode,
-			     u32 bus_fmt, u32 bus_flags)
+			     const struct drm_crtc_state *state)
 {
+	const struct drm_display_mode *mode = &state->adjusted_mode;
+	const struct tidss_crtc_state *tstate = to_tidss_crtc_state(state);
 	bool align, onoff, rf, ieo, ipc, ihs, ivs;
-	int i;
+	unsigned int i;
 	u32 port_width;
 	u32 hsw, hfp, hbp, vsw, vfp, vbp;
 
 	for (i = 0; i < ARRAY_SIZE(dispc6_bus_formats); ++i) {
-		if (dispc6_bus_formats[i].fmt != bus_fmt)
+		if (dispc6_bus_formats[i].fmt != tstate->bus_format)
 			continue;
 
 		port_width = dispc6_bus_formats[i].port_width;
@@ -440,12 +443,12 @@ static void dispc6_vp_enable(struct dispc_device *dispc, u32 hw_videoport,
 	else
 		ihs = false;
 
-	if (bus_flags & DRM_BUS_FLAG_DE_LOW)
+	if (tstate->bus_flags & DRM_BUS_FLAG_DE_LOW)
 		ieo = true;
 	else
 		ieo = false;
 
-	if (bus_flags & DRM_BUS_FLAG_PIXDATA_NEGEDGE)
+	if (tstate->bus_flags & DRM_BUS_FLAG_PIXDATA_NEGEDGE)
 		ipc = true;
 	else
 		ipc = false;
@@ -453,7 +456,7 @@ static void dispc6_vp_enable(struct dispc_device *dispc, u32 hw_videoport,
 	/* always use the 'rf' setting */
 	onoff = true;
 
-	if (bus_flags & DRM_BUS_FLAG_SYNC_NEGEDGE)
+	if (tstate->bus_flags & DRM_BUS_FLAG_SYNC_NEGEDGE)
 		rf = false;
 	else
 		rf = true;
@@ -522,20 +525,19 @@ static u64 argb8888_to_argb12121212(u32 argb8888)
 	return v;
 }
 
-static void dispc6_vp_setup(struct dispc_device *dispc,
-			    u32 hw_videoport,
-			    const struct tidss_vp_info *info)
+static void dispc6_vp_set_default_color(struct dispc_device *dispc,
+					u32 hw_videoport, u32 default_color)
 {
 	u64 v;
 
-	v = argb8888_to_argb12121212(info->default_color);
+	v = argb8888_to_argb12121212(default_color);
 
 	dispc6_ovr_write(dispc, 0, DISPC_OVR_DEFAULT_COLOR, v & 0xffffffff);
 	dispc6_ovr_write(dispc, 0, DISPC_OVR_DEFAULT_COLOR2,
 			 (v >> 32) & 0xffff);
 }
 
-static enum drm_mode_status dispc6_vp_check_mode(struct dispc_device *dispc,
+static enum drm_mode_status dispc6_vp_mode_valid(struct dispc_device *dispc,
 						 u32 hw_videoport,
 						 const struct drm_display_mode *mode)
 {
@@ -576,35 +578,59 @@ static enum drm_mode_status dispc6_vp_check_mode(struct dispc_device *dispc,
 	    vbp < 0 || vbp > 4095)
 		return MODE_BAD_VVALUE;
 
+	if (dispc->memory_bandwidth_limit) {
+		const unsigned int bpp = 4;
+		u64 bandwidth;
+
+		bandwidth = 1000 * mode->clock;
+		bandwidth = bandwidth * mode->hdisplay * mode->vdisplay * bpp;
+		bandwidth = div_u64(bandwidth, mode->htotal * mode->vtotal);
+
+		if (dispc->memory_bandwidth_limit < bandwidth)
+			return MODE_BAD;
+	}
+
 	return MODE_OK;
 }
 
-static int dispc6_vp_check_config(struct dispc_device *dispc, u32 hw_videoport,
-				  const struct drm_display_mode *mode,
-				  u32 bus_fmt, u32 bus_flags)
+static int dispc6_vp_check(struct dispc_device *dispc, u32 hw_videoport,
+			   const struct drm_crtc_state *state)
 {
+	const struct drm_display_mode *mode = &state->adjusted_mode;
+	const struct tidss_crtc_state *tstate = to_tidss_crtc_state(state);
 	enum drm_mode_status ok;
-	int i;
+	unsigned int i;
 
-	ok = dispc6_vp_check_mode(dispc, hw_videoport, mode);
-	if (ok != MODE_OK)
+	ok = dispc6_vp_mode_valid(dispc, hw_videoport, mode);
+	if (ok != MODE_OK) {
+		dev_dbg(dispc->dev, "%s: bad mode: %ux%u pclk %u kHz\n",
+			__func__, mode->hdisplay, mode->vdisplay, mode->clock);
 		return -EINVAL;
-
+	}
 
 	for (i = 0; i < ARRAY_SIZE(dispc6_bus_formats); ++i) {
-		if (dispc6_bus_formats[i].fmt == bus_fmt)
+		if (dispc6_bus_formats[i].fmt == tstate->bus_format)
 			break;
 	}
 
-	if (i == ARRAY_SIZE(dispc6_bus_formats))
+	if (i == ARRAY_SIZE(dispc6_bus_formats)) {
+		dev_dbg(dispc->dev, "%s: Unsupported bus format: %u\n",
+			__func__, tstate->bus_format);
 		return -EINVAL;
+	}
 
 	return 0;
 }
 
 static int dispc6_vp_enable_clk(struct dispc_device *dispc, u32 hw_videoport)
 {
-	return clk_prepare_enable(dispc->vp_clk);
+	int ret = clk_prepare_enable(dispc->vp_clk);
+
+	if (ret)
+		dev_err(dispc->dev, "%s: enabling clk failed: %d\n", __func__,
+			ret);
+
+	return ret;
 }
 
 static void dispc6_vp_disable_clk(struct dispc_device *dispc,
@@ -867,32 +893,31 @@ static void dispc6_vid_set_scaling(struct dispc_device *dispc,
 static const struct {
 	u32 fourcc;
 	u8 dss_code;
-	u8 bytespp;
 } dispc6_color_formats[] = {
-	{ DRM_FORMAT_ARGB4444, 0x0, 2, },
-	{ DRM_FORMAT_ABGR4444, 0x1, 2, },
-	{ DRM_FORMAT_RGBA4444, 0x2, 2, },
+	{ DRM_FORMAT_ARGB4444, 0x0, },
+	{ DRM_FORMAT_ABGR4444, 0x1, },
+	{ DRM_FORMAT_RGBA4444, 0x2, },
 
-	{ DRM_FORMAT_RGB565, 0x3, 2, },
-	{ DRM_FORMAT_BGR565, 0x4, 2, },
+	{ DRM_FORMAT_RGB565, 0x3, },
+	{ DRM_FORMAT_BGR565, 0x4, },
 
-	{ DRM_FORMAT_ARGB1555, 0x5, 2, },
-	{ DRM_FORMAT_ABGR1555, 0x6, 2, },
+	{ DRM_FORMAT_ARGB1555, 0x5, },
+	{ DRM_FORMAT_ABGR1555, 0x6, },
 
-	{ DRM_FORMAT_ARGB8888, 0x7, 4, },
-	{ DRM_FORMAT_ABGR8888, 0x8, 4, },
-	{ DRM_FORMAT_RGBA8888, 0x9, 4, },
-	{ DRM_FORMAT_BGRA8888, 0xa, 4, },
+	{ DRM_FORMAT_ARGB8888, 0x7, },
+	{ DRM_FORMAT_ABGR8888, 0x8, },
+	{ DRM_FORMAT_RGBA8888, 0x9, },
+	{ DRM_FORMAT_BGRA8888, 0xa, },
 
-	{ DRM_FORMAT_XRGB8888, 0x27, 4, },
-	{ DRM_FORMAT_XBGR8888, 0x28, 4, },
-	{ DRM_FORMAT_RGBX8888, 0x29, 4, },
-	{ DRM_FORMAT_BGRX8888, 0x2a, 4, },
+	{ DRM_FORMAT_XRGB8888, 0x27, },
+	{ DRM_FORMAT_XBGR8888, 0x28, },
+	{ DRM_FORMAT_RGBX8888, 0x29, },
+	{ DRM_FORMAT_BGRX8888, 0x2a, },
 
-	{ DRM_FORMAT_YUYV, 0x3e, 2, },
-	{ DRM_FORMAT_UYVY, 0x3f, 2, },
+	{ DRM_FORMAT_YUYV, 0x3e, },
+	{ DRM_FORMAT_UYVY, 0x3f, },
 
-	{ DRM_FORMAT_NV12, 0x3d, 2, },
+	{ DRM_FORMAT_NV12, 0x3d, },
 };
 
 static bool dispc6_fourcc_is_yuv(u32 fourcc)
@@ -910,7 +935,7 @@ static bool dispc6_fourcc_is_yuv(u32 fourcc)
 static void dispc6_plane_set_pixel_format(struct dispc_device *dispc,
 					  u32 hw_plane, u32 fourcc)
 {
-	int i;
+	unsigned int i;
 
 	for (i = 0; i < ARRAY_SIZE(dispc6_color_formats); ++i) {
 		if (dispc6_color_formats[i].fourcc == fourcc) {
@@ -922,19 +947,6 @@ static void dispc6_plane_set_pixel_format(struct dispc_device *dispc,
 	}
 
 	WARN_ON(1);
-}
-
-static int dispc6_fourcc_to_bytespp(u32 fourcc)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(dispc6_color_formats); ++i) {
-		if (dispc6_color_formats[i].fourcc == fourcc)
-			return dispc6_color_formats[i].bytespp;
-	}
-
-	WARN_ON(1);
-	return 4;
 }
 
 static s32 pixinc(int pixels, u8 ps)
@@ -970,44 +982,51 @@ const struct tidss_plane_feat *dispc6_plane_feat(struct dispc_device *dispc,
 }
 
 static int dispc6_plane_check(struct dispc_device *dispc, u32 hw_plane,
-			      const struct tidss_plane_info *oi,
+			      const struct drm_plane_state *state,
 			      u32 hw_videoport)
 {
 	return 0; /* XXX: Dummy check function to be implemented later */
 }
 
 static int dispc6_plane_setup(struct dispc_device *dispc, u32 hw_plane,
-			      const struct tidss_plane_info *oi,
+			      const struct drm_plane_state *state,
 			      u32 hw_videoport)
 {
-	u32 fourcc = oi->fourcc;
-	int bytespp = dispc6_fourcc_to_bytespp(fourcc);
+	u32 fourcc = state->fb->format->format;
+	dma_addr_t paddr = dispc7_plane_state_paddr(state);
+	u16 cpp = state->fb->format->cpp[0];
+	u32 fb_width = state->fb->pitches[0] / cpp;
+	u32 src_w = state->src_w >> 16;
+	u32 src_h = state->src_h >> 16;
 
 	dispc6_plane_set_pixel_format(dispc, hw_plane, fourcc);
 
-	dispc6_vid_write(dispc, hw_plane, DISPC_VID_BA_0, oi->paddr);
-	dispc6_vid_write(dispc, hw_plane, DISPC_VID_BA_1, oi->paddr);
+	dispc6_vid_write(dispc, hw_plane, DISPC_VID_BA_0, paddr);
+	dispc6_vid_write(dispc, hw_plane, DISPC_VID_BA_1, paddr);
 
-	dispc6_vid_write(dispc, hw_plane, DISPC_VID_BA_UV_0, oi->p_uv_addr);
-	dispc6_vid_write(dispc, hw_plane, DISPC_VID_BA_UV_1, oi->p_uv_addr);
+	if (state->fb->format->num_planes == 2) {
+		dma_addr_t p_uv_addr = dispc7_plane_state_p_uv_addr(state);
+
+		dispc6_vid_write(dispc, hw_plane, DISPC_VID_BA_UV_0, p_uv_addr);
+		dispc6_vid_write(dispc, hw_plane, DISPC_VID_BA_UV_1, p_uv_addr);
+	}
 
 	dispc6_vid_write(dispc, hw_plane, DISPC_VID_PICTURE_SIZE,
-			 (oi->width - 1) | ((oi->height - 1) << 16));
+			 (src_w - 1) | ((src_h - 1) << 16));
 
 	dispc6_vid_write(dispc, hw_plane, DISPC_VID_PIXEL_INC,
-			 pixinc(1, bytespp));
+			 pixinc(1, cpp));
 	dispc6_vid_write(dispc, hw_plane, DISPC_VID_ROW_INC,
-			 pixinc(1 + oi->fb_width - oi->width, bytespp));
+			 pixinc(1 + fb_width - src_w, cpp));
 
 	dispc6_vid_write(dispc, hw_plane, DISPC_VID_POSITION,
-			 oi->pos_x | (oi->pos_y << 16));
+			 state->crtc_x | (state->crtc_y << 16));
 
 	dispc6_vid_write(dispc, hw_plane, DISPC_VID_SIZE,
-			 (oi->out_width - 1) | ((oi->out_height - 1) << 16));
+			 (state->crtc_w - 1) | ((state->crtc_h - 1) << 16));
 
-	dispc6_vid_set_scaling(dispc, hw_plane,
-			       oi->width, oi->height,
-			       oi->out_width, oi->out_height,
+	dispc6_vid_set_scaling(dispc, hw_plane, src_w, src_h,
+			       state->crtc_w, state->crtc_h,
 			       fourcc);
 
 	/* enable YUV->RGB color conversion */
@@ -1110,9 +1129,9 @@ static const struct tidss_vp_feat *dispc6_vp_feat(struct dispc_device *dispc,
 	static const struct tidss_vp_feat vp_feat = {
 		.color = {
 			.gamma_size = DISPC6_GAMMA_TABLE_SIZE,
+			.gamma_type = TIDSS_GAMMA_8BIT,
 			.has_ctm = false, /* Driver implementation missing */
 		},
-		.has_trans_key = false,
 	};
 
 	return &vp_feat;
@@ -1122,7 +1141,7 @@ static void dispc6_vp_write_gamma_table(struct dispc_device *dispc,
 					u32 hw_videoport)
 {
 	u32 *table = dispc->gamma_table;
-	uint hwlen = ARRAY_SIZE(dispc->gamma_table);
+	unsigned int hwlen = ARRAY_SIZE(dispc->gamma_table);
 	unsigned int i;
 
 	dev_dbg(dispc->dev, "%s: hw_videoport %d\n", __func__, hw_videoport);
@@ -1154,9 +1173,9 @@ static void dispc6_vp_set_gamma(struct dispc_device *dispc,
 				unsigned int length)
 {
 	u32 *table = dispc->gamma_table;
-	uint hwlen = ARRAY_SIZE(dispc->gamma_table);
-	static const uint hwbits = 8;
-	uint i;
+	unsigned int hwlen = ARRAY_SIZE(dispc->gamma_table);
+	static const unsigned int hwbits = 8;
+	unsigned int i;
 
 	dev_dbg(dispc->dev, "%s: hw_videoport %d, lut len %u, hw len %u\n",
 		__func__, hw_videoport, length, hwlen);
@@ -1167,11 +1186,11 @@ static void dispc6_vp_set_gamma(struct dispc_device *dispc,
 	}
 
 	for (i = 0; i < length - 1; ++i) {
-		uint first = i * (hwlen - 1) / (length - 1);
-		uint last = (i + 1) * (hwlen - 1) / (length - 1);
-		uint w = last - first;
+		unsigned int first = i * (hwlen - 1) / (length - 1);
+		unsigned int last = (i + 1) * (hwlen - 1) / (length - 1);
+		unsigned int w = last - first;
 		u16 r, g, b;
-		uint j;
+		unsigned int j;
 
 		if (w == 0)
 			continue;
@@ -1194,8 +1213,9 @@ static void dispc6_vp_set_gamma(struct dispc_device *dispc,
 		dispc6_vp_write_gamma_table(dispc, hw_videoport);
 }
 
-static void dispc6_set_color_mgmt(struct dispc_device *dispc, u32 hw_videoport,
-				  const struct drm_crtc_state *state)
+static void dispc6_vp_set_color_mgmt(struct dispc_device *dispc,
+				     u32 hw_videoport,
+				     const struct drm_crtc_state *state)
 {
 	struct drm_color_lut *lut = NULL;
 	unsigned int length = 0;
@@ -1211,22 +1231,18 @@ static void dispc6_set_color_mgmt(struct dispc_device *dispc, u32 hw_videoport,
 	dispc6_vp_set_gamma(dispc, hw_videoport, lut, length);
 }
 
+static void dispc6_vp_setup(struct dispc_device *dispc, u32 hw_videoport,
+			    const struct drm_crtc_state *state)
+{
+	dispc6_vp_set_default_color(dispc, hw_videoport, 0);
+	dispc6_vp_set_color_mgmt(dispc, hw_videoport, state);
+}
+
 static int dispc6_init_gamma_tables(struct dispc_device *dispc)
 {
 	dispc6_vp_set_gamma(dispc, 0, NULL, 0);
 
 	return 0;
-}
-
-static u32 dispc6_get_memory_bandwidth_limit(struct dispc_device *dispc)
-{
-	u32 limit = 0;
-
-	/* Optional maximum memory bandwidth */
-	of_property_read_u32(dispc->dev->of_node, "max-memory-bandwidth",
-			     &limit);
-
-	return limit;
 }
 
 static const char *dispc6_plane_name(struct dispc_device *dispc,
@@ -1289,10 +1305,9 @@ static int dispc6_modeset_init(struct dispc_device *dispc)
 	int ret;
 	struct tidss_plane *tplane;
 	struct tidss_crtc *tcrtc;
-	struct tidss_encoder *tenc;
-	struct device_node *epnode;
+	struct drm_encoder *enc;
 	u32 fourccs[ARRAY_SIZE(dispc6_color_formats)];
-	int i;
+	unsigned int i;
 
 	/* first find if there is a connected panel/bridge */
 
@@ -1301,10 +1316,6 @@ static int dispc6_modeset_init(struct dispc_device *dispc)
 		dev_dbg(dev, "no panel or bridge found\n");
 		return ret;
 	}
-
-	epnode = of_graph_get_endpoint_by_regs(dev->of_node, 0, 0);
-	if (WARN_ON(!epnode))
-		return -EINVAL;
 
 	if (panel) {
 		dev_dbg(dev, "Setting up panel\n");
@@ -1334,7 +1345,7 @@ static int dispc6_modeset_init(struct dispc_device *dispc)
 
 	tidss->planes[tidss->num_planes++] = &tplane->plane;
 
-	tcrtc = tidss_crtc_create(tidss, hw_videoport, &tplane->plane, epnode);
+	tcrtc = tidss_crtc_create(tidss, hw_videoport, &tplane->plane);
 	if (IS_ERR(tcrtc)) {
 		dev_err(tidss->dev, "crtc create failed\n");
 		return PTR_ERR(tcrtc);
@@ -1342,13 +1353,13 @@ static int dispc6_modeset_init(struct dispc_device *dispc)
 
 	tidss->crtcs[tidss->num_crtcs++] = &tcrtc->crtc;
 
-	tenc = tidss_encoder_create(tidss, enc_type, 1 << tcrtc->crtc.index);
-	if (IS_ERR(tenc)) {
+	enc = tidss_encoder_create(tidss, enc_type, 1 << tcrtc->crtc.index);
+	if (IS_ERR(enc)) {
 		dev_err(tidss->dev, "encoder create failed\n");
-		return PTR_ERR(tenc);
+		return PTR_ERR(enc);
 	}
 
-	ret = drm_bridge_attach(&tenc->encoder, bridge, NULL);
+	ret = drm_bridge_attach(enc, bridge, NULL);
 	if (ret) {
 		dev_err(tidss->dev, "bridge attach failed: %d\n", ret);
 		return ret;
@@ -1357,44 +1368,41 @@ static int dispc6_modeset_init(struct dispc_device *dispc)
 	return 0;
 }
 
+static int dispc6_get_irq(struct dispc_device *dispc)
+{
+	return platform_get_irq(to_platform_device(dispc->tidss->dev), 0);
+}
+
 static void dispc6_remove(struct dispc_device *dispc);
 
-static const struct dispc_ops dispc6_ops = {
+static const struct tidss_dispc_ops dispc6_ops = {
 	.read_and_clear_irqstatus = dispc6_read_and_clear_irqstatus,
 	.write_irqenable = dispc6_write_irqenable,
 
-	.runtime_get = dispc6_runtime_get,
-	.runtime_put = dispc6_runtime_put,
-
-	.get_num_planes = dispc6_get_num_planes,
 	.get_num_vps = dispc6_get_num_vps,
-
-	.plane_name = dispc6_plane_name,
 	.vp_name = dispc6_vp_name,
-
-	.get_memory_bandwidth_limit = dispc6_get_memory_bandwidth_limit,
-
 	.vp_feat = dispc6_vp_feat,
-
 	.vp_enable = dispc6_vp_enable,
 	.vp_disable = dispc6_vp_disable,
 	.vp_go_busy = dispc6_vp_go_busy,
 	.vp_go = dispc6_vp_go,
-
+	.vp_mode_valid = dispc6_vp_mode_valid,
+	.vp_check = dispc6_vp_check,
 	.vp_setup = dispc6_vp_setup,
-	.vp_check_mode = dispc6_vp_check_mode,
-	.vp_check_config = dispc6_vp_check_config,
 
-	.vp_set_color_mgmt = dispc6_set_color_mgmt,
+	.vp_set_clk_rate = dispc6_vp_set_clk_rate,
+	.vp_enable_clk = dispc6_vp_enable_clk,
+	.vp_disable_clk = dispc6_vp_disable_clk,
 
+	.get_num_planes = dispc6_get_num_planes,
+	.plane_name = dispc6_plane_name,
 	.plane_feat = dispc6_plane_feat,
 	.plane_enable = dispc6_plane_enable,
 	.plane_check = dispc6_plane_check,
 	.plane_setup = dispc6_plane_setup,
 
-	.vp_set_clk_rate = dispc6_vp_set_clk_rate,
-	.vp_enable_clk = dispc6_vp_enable_clk,
-	.vp_disable_clk = dispc6_vp_disable_clk,
+	.runtime_get = dispc6_runtime_get,
+	.runtime_put = dispc6_runtime_put,
 
 	.runtime_suspend = dispc6_runtime_suspend,
 	.runtime_resume = dispc6_runtime_resume,
@@ -1402,6 +1410,8 @@ static const struct dispc_ops dispc6_ops = {
 	.remove = dispc6_remove,
 
 	.modeset_init = dispc6_modeset_init,
+
+	.get_irq = dispc6_get_irq,
 };
 
 static int dispc6_iomap_resource(struct platform_device *pdev, const char *name,
@@ -1425,7 +1435,7 @@ static int dispc6_iomap_resource(struct platform_device *pdev, const char *name,
 int dispc6_init(struct tidss_device *tidss)
 {
 	struct device *dev = tidss->dev;
-	struct platform_device *pdev = tidss->pdev;
+	struct platform_device *pdev = to_platform_device(dev);
 	struct dispc_device *dispc;
 	int r;
 
@@ -1477,6 +1487,9 @@ int dispc6_init(struct tidss_device *tidss)
 		r = PTR_ERR(dispc->vp_clk);
 		goto err_free;
 	}
+
+	of_property_read_u32(dispc->dev->of_node, "max-memory-bandwidth",
+			     &dispc->memory_bandwidth_limit);
 
 	r = dispc6_init_gamma_tables(dispc);
 	if (r)

@@ -298,7 +298,7 @@ struct vpfe_device {
 	 */
 	u32 field_off;
 	struct vpfe_ccdc ccdc;
-	bool stopping;
+	int stopping;
 	struct completion capture_stop;
 };
 

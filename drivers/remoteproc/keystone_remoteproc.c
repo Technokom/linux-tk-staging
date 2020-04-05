@@ -1,16 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * TI Keystone DSP remoteproc driver
  *
- * Copyright (C) 2015-2018 Texas Instruments Incorporated - http://www.ti.com/
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ * Copyright (C) 2015-2019 Texas Instruments Incorporated - http://www.ti.com/
  */
 
 #include <linux/module.h>
@@ -87,6 +79,8 @@ struct keystone_rproc_mem {
  * @loaded_rsc_table: kernel pointer of loaded resource table
  * @boot_addr: remote processor boot address used with userspace loader
  * @open_count: fops open reference counter
+ * @use_userspace_loader: flag to denote if driver is configured for userspace
+ *			  loader
  */
 struct keystone_rproc {
 	struct device *dev;
@@ -110,12 +104,14 @@ struct keystone_rproc {
 	void *loaded_rsc_table;
 	u32 boot_addr;
 	int open_count;
+	unsigned int use_userspace_loader : 1;
 };
 
 struct mem_sysfs_entry {
 	struct attribute attr;
-	ssize_t (*show)(struct keystone_rproc_mem *, char *);
-	ssize_t (*store)(struct keystone_rproc_mem *, const char *, size_t);
+	ssize_t (*show)(struct keystone_rproc_mem *mem, char *buf);
+	ssize_t (*store)(struct keystone_rproc_mem *mem, const char *buf,
+			 size_t len);
 };
 
 static ssize_t mem_addr_show(struct keystone_rproc_mem *mem, char *buf)
@@ -487,37 +483,37 @@ static int keystone_rproc_mmap(struct file *file, struct vm_area_struct *vma)
 		container_of(misc, struct keystone_rproc, misc);
 	size_t size = vma->vm_end - vma->vm_start;
 	size_t req_offset;
-	u32 index;
+	u32 idx;
 
-	index = vma->vm_pgoff & KEYSTONE_RPROC_UIO_MAP_INDEX_MASK;
+	idx = vma->vm_pgoff & KEYSTONE_RPROC_UIO_MAP_INDEX_MASK;
 
-	if (index >= ksproc->num_mems) {
-		dev_err(ksproc->dev, "invalid mmap region index %d\n", index);
+	if (idx >= ksproc->num_mems) {
+		dev_err(ksproc->dev, "invalid mmap region index %d\n", idx);
 		return -EINVAL;
 	}
 
-	req_offset = (vma->vm_pgoff - index) << PAGE_SHIFT;
+	req_offset = (vma->vm_pgoff - idx) << PAGE_SHIFT;
 	if (req_offset + size < req_offset) {
 		dev_err(ksproc->dev, "invalid request - overflow, mmap offset = 0x%zx size 0x%zx region %d\n",
-			req_offset, size, index);
+			req_offset, size, idx);
 		return -EINVAL;
 	}
 
-	if ((req_offset + size) > ksproc->mem[index].size) {
+	if ((req_offset + size) > ksproc->mem[idx].size) {
 		dev_err(ksproc->dev, "invalid request - out of range, mmap offset 0x%zx size 0x%zx region %d\n",
-			req_offset, size, index);
+			req_offset, size, idx);
 		return -EINVAL;
 	}
 
-	vma->vm_page_prot = phys_mem_access_prot(
-				file,
-				(ksproc->mem[index].bus_addr >> PAGE_SHIFT) +
-				(vma->vm_pgoff - index), size,
-				vma->vm_page_prot);
+	vma->vm_page_prot =
+		phys_mem_access_prot(file,
+				     (ksproc->mem[idx].bus_addr >> PAGE_SHIFT) +
+				     (vma->vm_pgoff - idx), size,
+				     vma->vm_page_prot);
 
 	if (remap_pfn_range(vma, vma->vm_start,
-			    (ksproc->mem[index].bus_addr >> PAGE_SHIFT) +
-			    (vma->vm_pgoff - index), size, vma->vm_page_prot))
+			    (ksproc->mem[idx].bus_addr >> PAGE_SHIFT) +
+			    (vma->vm_pgoff - idx), size, vma->vm_page_prot))
 		return -EAGAIN;
 
 	return 0;
@@ -578,20 +574,25 @@ static const struct file_operations keystone_rproc_fops = {
 /*
  * Used only with userspace loader/boot mechanism, the parsing of the firmware
  * is done in userspace, and a copy of the resource table is added for the
- * kernel-level access through an ioctl. Return the pointer to this resource
- * table for the remoteproc core to process the resource table for creating
- * the vrings and traces.
+ * kernel-level access through an ioctl. Create the remoteproc cached table
+ * using this resource table and configure the table pointer and table size
+ * accordingly to allow the remoteproc core to process the resource table for
+ * creating the vrings and traces.
  */
-static struct resource_table *
-keystone_rproc_find_rsc_table(struct rproc *rproc, const struct firmware *fw,
-			      int *tablesz)
+static int keystone_rproc_load_rsc_table(struct rproc *rproc,
+					 const struct firmware *fw)
 {
 	struct keystone_rproc *ksproc = rproc->priv;
 
-	if (tablesz)
-		*tablesz = ksproc->rsc_table_size;
+	rproc->cached_table = kmemdup(ksproc->rsc_table, ksproc->rsc_table_size,
+				      GFP_KERNEL);
+	if (!rproc->cached_table)
+		return -ENOMEM;
 
-	return ksproc->rsc_table;
+	rproc->table_ptr = rproc->cached_table;
+	rproc->table_sz = ksproc->rsc_table_size;
+
+	return 0;
 }
 
 /*
@@ -628,16 +629,6 @@ static u32 keystone_rproc_get_boot_addr(struct rproc *rproc,
 
 	return ksproc->boot_addr;
 }
-
-/*
- * Used only with userspace loader/boot mechanism, otherwise the remoteproc
- * core elf loader's functions are relied on.
- */
-static struct rproc_fw_ops keystone_rproc_fw_ops = {
-	.find_rsc_table		= keystone_rproc_find_rsc_table,
-	.find_loaded_rsc_table  = keystone_rproc_find_loaded_rsc_table,
-	.get_boot_addr		= keystone_rproc_get_boot_addr,
-};
 
 /*
  * Process the remoteproc exceptions
@@ -731,7 +722,7 @@ static int keystone_rproc_start(struct rproc *rproc)
 		goto out;
 	}
 
-	if (!rproc->use_userspace_loader) {
+	if (!ksproc->use_userspace_loader) {
 		ret = request_irq(ksproc->irq_fault,
 				  keystone_rproc_exception_interrupt, 0,
 				  dev_name(ksproc->dev), ksproc);
@@ -770,7 +761,7 @@ static int keystone_rproc_stop(struct rproc *rproc)
 {
 	struct keystone_rproc *ksproc = rproc->priv;
 
-	if (!rproc->use_userspace_loader) {
+	if (!ksproc->use_userspace_loader) {
 		keystone_rproc_dsp_reset(ksproc);
 		free_irq(ksproc->irq_fault, ksproc);
 	}
@@ -963,17 +954,31 @@ static int keystone_rproc_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	rproc->has_iommu = false;
-	rproc->use_userspace_loader = !use_rproc_core_loader;
-	if (rproc->use_userspace_loader) {
-		rproc->recovery_disabled = true;
-		rproc->auto_boot = false;
-		rproc->deny_sysfs_ops = true;
-		rproc->fw_ops = &keystone_rproc_fw_ops;
-	}
 
 	ksproc = rproc->priv;
 	ksproc->rproc = rproc;
 	ksproc->dev = dev;
+	ksproc->use_userspace_loader = !use_rproc_core_loader;
+
+	/*
+	 * customize the remoteproc core config flags and ELF fw ops for
+	 * userspace loader/boot mechanism
+	 */
+	if (ksproc->use_userspace_loader) {
+		rproc->recovery_disabled = true;
+		rproc->auto_boot = false;
+		rproc->skip_firmware_request = 1;
+		rproc->skip_load = 1;
+		rproc->deny_sysfs_ops = true;
+
+		rproc->ops->parse_fw = keystone_rproc_load_rsc_table;
+		rproc->ops->find_loaded_rsc_table =
+					keystone_rproc_find_loaded_rsc_table;
+		rproc->ops->get_boot_addr = keystone_rproc_get_boot_addr;
+		rproc->ops->sanity_check = NULL;
+		rproc->ops->load = NULL;
+	}
+
 	mutex_init(&ksproc->mlock);
 	spin_lock_init(&ksproc->lock);
 
@@ -1046,7 +1051,7 @@ static int keystone_rproc_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, ksproc);
 
-	if (rproc->use_userspace_loader) {
+	if (ksproc->use_userspace_loader) {
 		uio = &ksproc->uio;
 		uio->name = uio_name;
 		uio->version = DRIVER_UIO_VERSION;
@@ -1106,9 +1111,8 @@ free_rproc:
 static int keystone_rproc_remove(struct platform_device *pdev)
 {
 	struct keystone_rproc *ksproc = platform_get_drvdata(pdev);
-	struct rproc *rproc = ksproc->rproc;
 
-	if (rproc->use_userspace_loader) {
+	if (ksproc->use_userspace_loader) {
 		keystone_rproc_mem_del_attrs(ksproc);
 		misc_deregister(&ksproc->misc);
 		uio_unregister_device(&ksproc->uio);

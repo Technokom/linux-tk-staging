@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /**
  * dwc3-omap.c - OMAP Specific Glue layer
  *
@@ -5,15 +6,6 @@
  *
  * Authors: Felipe Balbi <balbi@ti.com>,
  *	    Sebastian Andrzej Siewior <bigeasy@linutronix.de>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2  of
- * the License as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/module.h>
@@ -586,16 +578,6 @@ static int dwc3_omap_resume(struct device *dev)
 	pm_runtime_disable(dev);
 	pm_runtime_set_active(dev);
 	pm_runtime_enable(dev);
-
-	if (extcon_get_state(omap->edev, EXTCON_USB))
-		dwc3_omap_set_mailbox(omap, OMAP_DWC3_VBUS_VALID);
-	else
-		dwc3_omap_set_mailbox(omap, OMAP_DWC3_VBUS_OFF);
-
-	if (extcon_get_state(omap->edev, EXTCON_USB_HOST))
-		dwc3_omap_set_mailbox(omap, OMAP_DWC3_ID_GROUND);
-	else
-		dwc3_omap_set_mailbox(omap, OMAP_DWC3_ID_FLOAT);
 
 	return 0;
 }

@@ -32,14 +32,18 @@
 #define DP83867_CFG3		0x1e
 
 /* Extended Registers */
+/* TBD register name to be available in a new revision of the TRM */
+#define DP83867_FLD_THRESH	0x002E
 #define DP83867_CFG4            0x0031
 #define DP83867_RGMIICTL	0x0032
 #define DP83867_STRAP_STS1	0x006E
+#define DP83867_STRAP_STS2	0x006F
 #define DP83867_RGMIIDCTL	0x0086
 #define DP83867_IO_MUX_CFG	0x0170
 
 #define DP83867_SW_RESET	BIT(15)
 #define DP83867_SW_RESTART	BIT(14)
+#define STRAP_STS2_FLD_MASK	BIT(10)
 
 /* MICR Interrupt bits */
 #define MII_DP83867_MICR_AN_ERR_INT_EN		BIT(15)
@@ -75,6 +79,8 @@
 
 #define DP83867_IO_MUX_CFG_IO_IMPEDANCE_MAX	0x0
 #define DP83867_IO_MUX_CFG_IO_IMPEDANCE_MIN	0x1f
+#define DP83867_IO_MUX_CFG_CLK_O_SEL_MASK	(0x1f << 8)
+#define DP83867_IO_MUX_CFG_CLK_O_SEL_SHIFT	8
 
 /* CFG4 bits */
 #define DP83867_CFG4_PORT_MIRROR_EN              BIT(0)
@@ -92,6 +98,7 @@ struct dp83867_private {
 	int io_impedance;
 	int port_mirroring;
 	bool rxctrl_strap_quirk;
+	int clk_output_sel;
 };
 
 static int dp83867_ack_interrupt(struct phy_device *phydev)
@@ -160,6 +167,14 @@ static int dp83867_of_init(struct phy_device *phydev)
 	dp83867->io_impedance = -EINVAL;
 
 	/* Optional configuration */
+	ret = of_property_read_u32(of_node, "ti,clk-output-sel",
+				   &dp83867->clk_output_sel);
+	if (ret || dp83867->clk_output_sel > DP83867_CLK_O_SEL_REF_CLK)
+		/* Keep the default value if ti,clk-output-sel is not set
+		 * or too high
+		 */
+		dp83867->clk_output_sel = DP83867_CLK_O_SEL_REF_CLK;
+
 	if (of_property_read_bool(of_node, "ti,max-output-impedance"))
 		dp83867->io_impedance = DP83867_IO_MUX_CFG_IO_IMPEDANCE_MAX;
 	else if (of_property_read_bool(of_node, "ti,min-output-impedance"))
@@ -225,6 +240,20 @@ static int dp83867_config_init(struct phy_device *phydev)
 		phy_write_mmd(phydev, DP83867_DEVADDR, DP83867_CFG4, val);
 	}
 
+	/* When the Phy is strapped to enable Fast Link Drop (FLD) feature,
+	 * the detect threshold value becomes 0x2 in bit 2:0 instead of 0x1
+	 * as in non strapped case. This causes the phy link to be unstable.
+	 * As a workaround, write a value of 0x1 in this bit field if
+	 * bit 10 of DP83867_STRAP_STS2 is set (enable FLD).
+	 */
+	val = phy_read_mmd(phydev, DP83867_DEVADDR, DP83867_STRAP_STS2);
+	if (val & STRAP_STS2_FLD_MASK) {
+		val = phy_read_mmd(phydev, DP83867_DEVADDR, DP83867_FLD_THRESH);
+		val &= ~0x7;
+		phy_write_mmd(phydev, DP83867_DEVADDR, DP83867_FLD_THRESH,
+			      val | 0x1);
+	}
+
 	if (phy_interface_is_rgmii(phydev)) {
 		val = phy_read(phydev, MII_DP83867_PHYCTRL);
 		if (val < 0)
@@ -249,11 +278,12 @@ static int dp83867_config_init(struct phy_device *phydev)
 		ret = phy_write(phydev, MII_DP83867_PHYCTRL, val);
 		if (ret)
 			return ret;
-	}
 
-	if ((phydev->interface >= PHY_INTERFACE_MODE_RGMII_ID) &&
-	    (phydev->interface <= PHY_INTERFACE_MODE_RGMII_RXID)) {
+		/* Set up RGMII delays */
 		val = phy_read_mmd(phydev, DP83867_DEVADDR, DP83867_RGMIICTL);
+
+		val &= ~(DP83867_RGMII_TX_CLK_DELAY_EN |
+			 DP83867_RGMII_RX_CLK_DELAY_EN);
 
 		if (phydev->interface == PHY_INTERFACE_MODE_RGMII_ID)
 			val |= (DP83867_RGMII_TX_CLK_DELAY_EN | DP83867_RGMII_RX_CLK_DELAY_EN);
@@ -295,6 +325,14 @@ static int dp83867_config_init(struct phy_device *phydev)
 	if (dp83867->port_mirroring != DP83867_PORT_MIRROING_KEEP)
 		dp83867_config_port_mirroring(phydev);
 
+	/* Clock output selection if muxing property is set */
+	if (dp83867->clk_output_sel != DP83867_CLK_O_SEL_REF_CLK) {
+		val = phy_read_mmd(phydev, DP83867_DEVADDR, DP83867_IO_MUX_CFG);
+		val &= ~DP83867_IO_MUX_CFG_CLK_O_SEL_MASK;
+		val |= (dp83867->clk_output_sel << DP83867_IO_MUX_CFG_CLK_O_SEL_SHIFT);
+		phy_write_mmd(phydev, DP83867_DEVADDR, DP83867_IO_MUX_CFG, val);
+	}
+
 	return 0;
 }
 
@@ -324,8 +362,6 @@ static struct phy_driver dp83867_driver[] = {
 		.ack_interrupt	= dp83867_ack_interrupt,
 		.config_intr	= dp83867_config_intr,
 
-		.config_aneg	= genphy_config_aneg,
-		.read_status	= genphy_read_status,
 		.suspend	= genphy_suspend,
 		.resume		= genphy_resume,
 	},

@@ -1,11 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * include/net/lredev.h - lre device API
- * Copyright (c) 2018 Texas Instruments Incorporated - http://www.ti.com/
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ * Copyright (c) 2019 Texas Instruments Incorporated - http://www.ti.com/
  */
 #ifndef _LINUX_LREDEV_H_
 #define _LINUX_LREDEV_H_

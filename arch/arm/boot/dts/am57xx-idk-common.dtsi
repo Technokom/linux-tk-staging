@@ -165,6 +165,9 @@
 				"ti-pruss/am57xx-pru1-prueth-fw.elf";
 		sram = <&ocmcram1>;
 		interrupt-parent = <&pruss2_intc>;
+		mii-rt = <&pruss2_mii_rt>;
+		interrupts = <20>, <21>;
+		interrupt-names = "rx_red_hp", "rx_red_lp";
 
 		pruss2_emac0: ethernet-mii0 {
 			phy-handle = <&pruss2_eth0_phy>;
@@ -431,38 +434,6 @@
 		#gpio-cells = <2>;
 	};
 
-	tc358778: tc358778@0e {
-		compatible = "toshiba,tc358778", "toshiba,tc358768";
-		reg = <0x0e>;
-		status = "disabled";
-
-		clocks = <&src_clk_x1>;
-		clock-names = "refclk";
-
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			port@0 {
-				reg = <0>;
-				tc358778_in: endpoint {
-					remote-endpoint = <&dpi_out>;
-					data-lines = <24>;
-				};
-			};
-
-			port@1 {
-				reg = <1>;
-				tc358778_out: endpoint {
-					/*
-					 * lanes and remote-endpoint defined per
-					 * panel.
-					 */
-				};
-			};
-		};
-	};
-
 	ov2659: ov2659@30 {
 		compatible = "ovti,ov2659";
 		reg = <0x30>;
@@ -478,6 +449,28 @@
 				vsync-active = <1>;
 				pclk-sample = <1>;
 				link-frequencies = /bits/ 64 <70000000>;
+			};
+		};
+	};
+
+	dsi_bridge: tc358778@0e {
+		compatible = "toshiba,tc358778", "toshiba,tc358768";
+		reg = <0x0e>;
+		status = "disabled";
+
+		clocks = <&src_clk_x1>;
+		clock-names = "refclk";
+
+		dsi_bridge_ports: ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				rgb_in: endpoint {
+					remote-endpoint = <&dpi_out>;
+					data-lines = <24>;
+				};
 			};
 		};
 	};
@@ -553,6 +546,7 @@
 	vqmmc-supply = <&ldo1_reg>;
 	bus-width = <4>;
 	cd-gpios = <&gpio6 27 GPIO_ACTIVE_LOW>; /* gpio 219 */
+	no-1-8-v;
 };
 
 &mmc2 {
@@ -622,6 +616,10 @@
 	};
 };
 
+&cpu0 {
+	vdd-supply = <&smps12_reg>;
+};
+
 &gpu {
 	status = "ok";
 };
@@ -656,21 +654,17 @@
 			reg = <0>;
 
 			dpi_out: endpoint {
-				remote-endpoint = <&tc358778_in>;
+				remote-endpoint = <&rgb_in>;
 				data-lines = <24>;
 			};
 		};
 	};
 };
 
-&bb2d {
-	status = "okay";
-};
-
 &pruss_soc_bus1 {
 	status = "okay";
 
-	pruss1: pruss@0 {
+	pruss1: pruss@4b200000 {
 		status = "okay";
 	};
 };
@@ -678,7 +672,7 @@
 &pruss_soc_bus2 {
 	status = "okay";
 
-	pruss2: pruss@0 {
+	pruss2: pruss@4b280000 {
 		status = "okay";
 	};
 };
@@ -698,6 +692,6 @@
 	};
 };
 
-&cpu0 {
-	vdd-supply = <&smps12_reg>;
+&bb2d {
+	status = "ok";
 };

@@ -22,7 +22,6 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
-#include <linux/pm_runtime.h>
 #include <linux/sram.h>
 #include <linux/ti-emif-sram.h>
 
@@ -139,6 +138,9 @@ static int ti_emif_alloc_sram(struct device *dev,
 	emif_data->pm_functions.exit_sr =
 		sram_resume_address(emif_data,
 				    (unsigned long)ti_emif_exit_sr);
+	emif_data->pm_functions.run_hw_leveling =
+		sram_resume_address(emif_data,
+				    (unsigned long)ti_emif_run_hw_leveling);
 
 	emif_data->pm_data.regs_virt =
 		(struct emif_regs_amx3 *)emif_data->ti_emif_sram_data_virt;
@@ -267,6 +269,15 @@ static int ti_emif_resume(struct device *dev)
 
 	return 0;
 }
+
+static int ti_emif_suspend(struct device *dev)
+{
+	/*
+	 * The contents will be present in DDR hence no need to
+	 * explicitly save
+	 */
+	return 0;
+}
 #endif /* CONFIG_PM_SLEEP */
 
 static int ti_emif_probe(struct platform_device *pdev)
@@ -287,20 +298,12 @@ static int ti_emif_probe(struct platform_device *pdev)
 
 	emif_data->pm_data.ti_emif_sram_config = (unsigned long)match->data;
 
-	pm_runtime_enable(dev);
-	ret = pm_runtime_get_sync(dev);
-	if (ret < 0) {
-		dev_err(dev, "pm_runtime_get_sync() failed\n");
-		goto fail_runtime_put;
-	}
-
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	emif_data->pm_data.ti_emif_base_addr_virt = devm_ioremap_resource(dev,
 									  res);
 	if (IS_ERR(emif_data->pm_data.ti_emif_base_addr_virt)) {
-		dev_err(dev, "could not ioremap emif mem\n");
 		ret = PTR_ERR(emif_data->pm_data.ti_emif_base_addr_virt);
-		goto fail_runtime_put;
+		return ret;
 	}
 
 	emif_data->pm_data.ti_emif_base_addr_phys = res->start;
@@ -309,7 +312,7 @@ static int ti_emif_probe(struct platform_device *pdev)
 
 	ret = ti_emif_alloc_sram(dev, emif_data);
 	if (ret)
-		goto fail_runtime_put;
+		return ret;
 
 	ret = ti_emif_push_sram(dev, emif_data);
 	if (ret)
@@ -321,22 +324,15 @@ static int ti_emif_probe(struct platform_device *pdev)
 
 fail_free_sram:
 	ti_emif_free_sram(emif_data);
-fail_runtime_put:
-	pm_runtime_put_sync(dev);
-	pm_runtime_disable(dev);
 
 	return ret;
 }
 
 static int ti_emif_remove(struct platform_device *pdev)
 {
-	struct device *dev = &pdev->dev;
 	struct ti_emif_data *emif_data = emif_instance;
 
 	emif_instance = NULL;
-
-	pm_runtime_put_sync(dev);
-	pm_runtime_disable(dev);
 
 	ti_emif_free_sram(emif_data);
 
@@ -344,7 +340,7 @@ static int ti_emif_remove(struct platform_device *pdev)
 }
 
 static const struct dev_pm_ops ti_emif_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(NULL, ti_emif_resume)
+	SET_SYSTEM_SLEEP_PM_OPS(ti_emif_suspend, ti_emif_resume)
 };
 
 static struct platform_driver ti_emif_driver = {

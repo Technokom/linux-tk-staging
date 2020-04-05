@@ -2,7 +2,7 @@
 /*
  * PRU-ICSS remoteproc driver for various TI SoCs
  *
- * Copyright (C) 2014-2018 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2014-2019 Texas Instruments Incorporated - http://www.ti.com/
  *	Suman Anna <s-anna@ti.com>
  *	Andrew F. Davis <afd@ti.com>
  */
@@ -13,11 +13,12 @@
 #include <linux/mailbox_client.h>
 #include <linux/module.h>
 #include <linux/of_device.h>
-#include <linux/remoteproc.h>
 #include <linux/omap-mailbox.h>
+#include <linux/pruss.h>
+#include <linux/pruss_driver.h>
+#include <linux/remoteproc.h>
 
 #include "remoteproc_internal.h"
-#include "pruss.h"
 #include "pru_rproc.h"
 
 /* PRU_ICSS_PRU_CTRL registers */
@@ -43,14 +44,20 @@
 #define PRU_DEBUG_GPREG(x)	(0x0000 + (x) * 4)
 #define PRU_DEBUG_CT_REG(x)	(0x0080 + (x) * 4)
 
+/* PRU/RTU Core IRAM address masks */
+#define PRU0_IRAM_ADDR_MASK	0x34000
+#define PRU1_IRAM_ADDR_MASK	0x38000
+#define RTU0_IRAM_ADDR_MASK	0x4000
+#define RTU1_IRAM_ADDR_MASK	0x6000
+
 /**
- * enum pru_mem - PRU core memory range identifiers
+ * enum pru_iomem - PRU core memory/register range identifiers
  */
-enum pru_mem {
-	PRU_MEM_IRAM = 0,
-	PRU_MEM_CTRL,
-	PRU_MEM_DEBUG,
-	PRU_MEM_MAX,
+enum pru_iomem {
+	PRU_IOMEM_IRAM = 0,
+	PRU_IOMEM_CTRL,
+	PRU_IOMEM_DEBUG,
+	PRU_IOMEM_MAX,
 };
 
 /**
@@ -71,14 +78,14 @@ enum pru_mem {
  * @sdram_da: device address of secondary Data RAM for this PRU
  * @shrdram_da: device address of shared Data RAM
  * @fw_name: name of firmware image used during loading
- * @gpmux_save: saved value for gpmux config
  * @dt_irqs: number of irqs configured from DT
+ * @gpmux_save: saved value for gpmux config
  * @lock: mutex to protect client usage
  * @dbg_single_step: debug state variable to set PRU into single step mode
  * @dbg_continuous: debug state variable to restore PRU execution mode
- * @is_rtu: boolean flag to indicate the core is a RTU core
  * @fw_has_intc_rsc: boolean flag to indicate INTC config through firmware
  * @is_k3: boolean flag used to indicate the core has increased number of events
+ * @is_rtu: boolean flag to indicate the core is a RTU core
  */
 struct pru_rproc {
 	int id;
@@ -89,7 +96,7 @@ struct pru_rproc {
 	struct mbox_client client;
 	int irq_vring;
 	int irq_kick;
-	struct pruss_mem_region mem_regions[PRU_MEM_MAX];
+	struct pruss_mem_region mem_regions[PRU_IOMEM_MAX];
 	struct pruss_intc_config intc_config;
 	spinlock_t rmw_lock; /* register access lock */
 	u32 iram_da;
@@ -97,27 +104,27 @@ struct pru_rproc {
 	u32 sdram_da;
 	u32 shrdram_da;
 	const char *fw_name;
-	u8 gpmux_save;
 	int dt_irqs;
+	u8 gpmux_save;
 	struct mutex lock; /* client access lock */
 	u32 dbg_single_step;
 	u32 dbg_continuous;
-	bool is_rtu;
-	bool fw_has_intc_rsc;
-	bool is_k3;
+	unsigned int fw_has_intc_rsc : 1;
+	unsigned int is_k3 : 1;
+	unsigned int is_rtu : 1;
 };
 
 static void *pru_d_da_to_va(struct pru_rproc *pru, u32 da, int len);
 
 static inline u32 pru_control_read_reg(struct pru_rproc *pru, unsigned int reg)
 {
-	return readl_relaxed(pru->mem_regions[PRU_MEM_CTRL].va + reg);
+	return readl_relaxed(pru->mem_regions[PRU_IOMEM_CTRL].va + reg);
 }
 
 static inline
 void pru_control_write_reg(struct pru_rproc *pru, unsigned int reg, u32 val)
 {
-	writel_relaxed(val, pru->mem_regions[PRU_MEM_CTRL].va + reg);
+	writel_relaxed(val, pru->mem_regions[PRU_IOMEM_CTRL].va + reg);
 }
 
 static inline
@@ -150,6 +157,110 @@ static int pru_rproc_set_firmware(struct rproc *rproc, const char *fw_name)
 		fw_name = pru->fw_name;
 
 	return rproc_set_firmware(rproc, fw_name);
+}
+
+static int pru_rproc_intc_dt_config(struct pru_rproc *pru, int index)
+{
+	struct device *dev = &pru->rproc->dev;
+	struct device_node *np = pru->client_np;
+	struct property *prop;
+	const char *prop_name = "ti,pru-interrupt-map";
+	u8 max_system_events, max_pru_channels, max_pru_host_ints;
+	int ret = 0, i;
+	int dt_irqs;
+	u32 *arr;
+	bool has_irqs = false;
+
+	prop = of_find_property(np, prop_name, NULL);
+	if (!prop)
+		return 0;
+
+	dt_irqs = of_property_count_u32_elems(np, prop_name);
+	if (dt_irqs <= 0 || dt_irqs % 4) {
+		dev_err(dev, "bad interrupt map data %d, expected multiple of 4\n",
+			dt_irqs);
+		return -EINVAL;
+	}
+
+	arr = kmalloc_array(dt_irqs, sizeof(u32), GFP_KERNEL);
+	if (!arr)
+		return -ENOMEM;
+
+	ret = of_property_read_u32_array(np, prop_name, arr, dt_irqs);
+	if (ret) {
+		dev_err(dev, "failed to read pru irq map: %d\n", ret);
+		goto out;
+	}
+
+	max_system_events = pru->is_k3 ?
+				MAX_PRU_SYS_EVENTS_K3 : MAX_PRU_SYS_EVENTS;
+	max_pru_channels = pru->is_k3 ? MAX_PRU_CHANNELS_K3 : MAX_PRU_CHANNELS;
+	max_pru_host_ints = pru->is_k3 ? MAX_PRU_HOST_INT_K3 : MAX_PRU_HOST_INT;
+
+	for (i = 0; i < ARRAY_SIZE(pru->intc_config.sysev_to_ch); i++)
+		pru->intc_config.sysev_to_ch[i] = -1;
+
+	for (i = 0; i < ARRAY_SIZE(pru->intc_config.ch_to_host); i++)
+		pru->intc_config.ch_to_host[i] = -1;
+
+	for (i = 0; i < dt_irqs; i += 4) {
+		if (arr[i] != index)
+			continue;
+
+		if (arr[i + 1] < 0 ||
+		    arr[i + 1] >= max_system_events) {
+			dev_err(dev, "bad sys event %d\n", arr[i + 1]);
+			ret = -EINVAL;
+			goto out;
+		}
+
+		if (arr[i + 2] < 0 ||
+		    arr[i + 2] >= max_pru_channels) {
+			dev_err(dev, "bad channel %d\n", arr[i + 2]);
+			ret = -EINVAL;
+			goto out;
+		}
+
+		if (arr[i + 3] < 0 ||
+		    arr[i + 3] >= max_pru_host_ints) {
+			dev_err(dev, "bad irq %d\n", arr[i + 3]);
+			ret = -EINVAL;
+			goto out;
+		}
+
+		pru->intc_config.sysev_to_ch[arr[i + 1]] = arr[i + 2];
+		dev_dbg(dev, "sysevt-to-ch[%d] -> %d\n", arr[i + 1],
+			arr[i + 2]);
+
+		pru->intc_config.ch_to_host[arr[i + 2]] = arr[i + 3];
+		dev_dbg(dev, "chnl-to-host[%d] -> %d\n", arr[i + 2],
+			arr[i + 3]);
+
+		has_irqs = true;
+	}
+
+	/*
+	 * The property "ti,pru-interrupt-map" is used in a consumer node, but
+	 * need not necessarily have data for all referenced PRUs. Provide a
+	 * fallback to get the interrupt data from firmware for PRUs ith no
+	 * interrupt data.
+	 */
+	if (!has_irqs) {
+		dev_dbg(dev, "no DT irqs, falling back to firmware intc rsc mode\n");
+		goto out;
+	}
+
+	pru->dt_irqs = dt_irqs;
+	ret = pruss_intc_configure(pru->pruss, &pru->intc_config);
+	if (ret) {
+		dev_err(dev, "failed to configure intc %d\n", ret);
+		pru->dt_irqs = 0;
+	}
+
+out:
+	kfree(arr);
+
+	return ret;
 }
 
 static struct rproc *__pru_rproc_get(struct device_node *np, int index)
@@ -207,14 +318,10 @@ struct rproc *pru_rproc_get(struct device_node *np, int index)
 {
 	struct rproc *rproc;
 	struct pru_rproc *pru;
-	struct device *dev;
-	struct property *prop;
-	int ret, dt_irqs, i;
-	u32 mux;
 	const char *fw_name;
-	u32 *arr;
-	u8 max_system_events, max_pru_channels, max_pru_host_ints;
-	bool has_irqs = false;
+	struct device *dev;
+	int ret;
+	u32 mux;
 
 	rproc = __pru_rproc_get(np, index);
 	if (IS_ERR(rproc))
@@ -222,10 +329,6 @@ struct rproc *pru_rproc_get(struct device_node *np, int index)
 
 	pru = rproc->priv;
 	dev = &rproc->dev;
-	max_system_events = pru->is_k3 ?
-				MAX_PRU_SYS_EVENTS_K3 : MAX_PRU_SYS_EVENTS;
-	max_pru_channels = pru->is_k3 ? MAX_PRU_CHANNELS_K3 : MAX_PRU_CHANNELS;
-	max_pru_host_ints = pru->is_k3 ? MAX_PRU_HOST_INT_K3 : MAX_PRU_HOST_INT;
 
 	mutex_lock(&pru->lock);
 
@@ -236,7 +339,7 @@ struct rproc *pru_rproc_get(struct device_node *np, int index)
 	}
 
 	pru->client_np = np;
-	rproc->deny_sysfs_ops = true;
+	rproc->deny_sysfs_ops = 1;
 
 	mutex_unlock(&pru->lock);
 
@@ -266,93 +369,12 @@ struct rproc *pru_rproc_get(struct device_node *np, int index)
 		}
 	}
 
-	prop = of_find_property(np, "ti,pru-interrupt-map", NULL);
-	if (!prop)
-		goto skip_irq_config;
-
-	dt_irqs = of_property_count_u32_elems(np, "ti,pru-interrupt-map");
-	if (dt_irqs <= 0 || dt_irqs & 0x3) {
-		dev_err(dev, "bad interrupt map data %d, expected multiple of 4\n",
-			dt_irqs);
-		ret = -EINVAL;
+	ret = pru_rproc_intc_dt_config(pru, index);
+	if (ret)
 		goto err;
-	}
 
-	arr = kmalloc_array(dt_irqs, sizeof(u32), GFP_KERNEL);
-	if (!arr) {
-		ret = -ENOMEM;
-		goto err;
-	}
-
-	ret = of_property_read_u32_array(np, "ti,pru-interrupt-map",
-					 arr, dt_irqs);
-	if (ret) {
-		dev_err(dev, "failed to read pru irq map: %d\n", ret);
-		goto err_irq;
-	}
-
-	for (i = 0; i < ARRAY_SIZE(pru->intc_config.sysev_to_ch); i++)
-		pru->intc_config.sysev_to_ch[i] = -1;
-
-	for (i = 0; i < ARRAY_SIZE(pru->intc_config.ch_to_host); i++)
-		pru->intc_config.ch_to_host[i] = -1;
-
-	for (i = 0; i < dt_irqs; i += 4) {
-		if (arr[i] != index)
-			continue;
-
-		if (arr[i + 1] < 0 ||
-		    arr[i + 1] >= max_system_events) {
-			dev_err(dev, "bad sys event %d\n", arr[i + 1]);
-			ret = -EINVAL;
-			goto err_irq;
-		}
-
-		if (arr[i + 2] < 0 ||
-		    arr[i + 2] >= max_pru_channels) {
-			dev_err(dev, "bad channel %d\n", arr[i + 2]);
-			ret = -EINVAL;
-			goto err_irq;
-		}
-
-		if (arr[i + 3] < 0 ||
-		    arr[i + 3] >= max_pru_host_ints) {
-			dev_err(dev, "bad irq %d\n", arr[i + 3]);
-				ret = -EINVAL;
-			goto err_irq;
-		}
-
-		pru->intc_config.sysev_to_ch[arr[i + 1]] = arr[i + 2];
-		dev_dbg(dev, "sysevt-to-ch[%d] -> %d\n", arr[i + 1],
-			arr[i + 2]);
-
-		pru->intc_config.ch_to_host[arr[i + 2]] = arr[i + 3];
-		dev_dbg(dev, "chnl-to-host[%d] -> %d\n", arr[i + 2],
-			arr[i + 3]);
-
-		has_irqs = true;
-	}
-
-	if (!has_irqs) {
-		dev_dbg(dev, "no DT irqs, falling back to firmware intc rsc mode\n");
-		goto bypass_irq_config;
-	}
-
-	pru->dt_irqs = dt_irqs;
-	ret = pruss_intc_configure(pru->pruss, &pru->intc_config);
-	if (ret) {
-		dev_err(dev, "failed to configure intc %d\n", ret);
-		goto err_irq;
-	}
-
-bypass_irq_config:
-	kfree(arr);
-
-skip_irq_config:
 	return rproc;
 
-err_irq:
-	kfree(arr);
 err:
 	pru_rproc_put(rproc);
 	return ERR_PTR(ret);
@@ -382,15 +404,16 @@ void pru_rproc_put(struct rproc *rproc)
 	if (!pru->client_np)
 		return;
 
+	pruss_cfg_set_gpmux(pru->pruss, pru->id, pru->gpmux_save);
+
 	if (pru->dt_irqs)
 		pruss_intc_unconfigure(pru->pruss, &pru->intc_config);
 
 	pru_rproc_set_firmware(rproc, NULL);
-	pruss_cfg_set_gpmux(pru->pruss, pru->id, pru->gpmux_save);
 
 	mutex_lock(&pru->lock);
 	pru->client_np = NULL;
-	rproc->deny_sysfs_ops = false;
+	rproc->deny_sysfs_ops = 0;
 	mutex_unlock(&pru->lock);
 
 	put_device(&rproc->dev);
@@ -454,16 +477,16 @@ EXPORT_SYMBOL_GPL(pru_rproc_set_ctable);
 
 static inline u32 pru_debug_read_reg(struct pru_rproc *pru, unsigned int reg)
 {
-	return readl_relaxed(pru->mem_regions[PRU_MEM_DEBUG].va + reg);
+	return readl_relaxed(pru->mem_regions[PRU_IOMEM_DEBUG].va + reg);
 }
 
 static inline
 void pru_debug_write_reg(struct pru_rproc *pru, unsigned int reg, u32 val)
 {
-	writel_relaxed(val, pru->mem_regions[PRU_MEM_DEBUG].va + reg);
+	writel_relaxed(val, pru->mem_regions[PRU_IOMEM_DEBUG].va + reg);
 }
 
-static int pru_rproc_debug_read_regs(struct seq_file *s, void *data)
+static int regs_show(struct seq_file *s, void *data)
 {
 	struct rproc *rproc = s->private;
 	struct pru_rproc *pru = rproc->priv;
@@ -508,17 +531,7 @@ static int pru_rproc_debug_read_regs(struct seq_file *s, void *data)
 	return 0;
 }
 
-static int pru_rproc_debug_regs_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, pru_rproc_debug_read_regs, inode->i_private);
-}
-
-static const struct file_operations pru_rproc_debug_regs_ops = {
-	.open = pru_rproc_debug_regs_open,
-	.read = seq_read,
-	.llseek	= seq_lseek,
-	.release = single_release,
-};
+DEFINE_SHOW_ATTRIBUTE(regs);
 
 /*
  * Control PRU single-step mode
@@ -529,8 +542,8 @@ static const struct file_operations pru_rproc_debug_regs_ops = {
  *
  * Writing a non-zero value sets the PRU into single-step mode irrespective
  * of its previous state. The PRU mode is saved only on the first set into
- * a single-step mode. Writing a non-zero value will restore the PRU into
- * its original mode.
+ * a single-step mode. Writing a zero value will restore the PRU into its
+ * original mode.
  */
 static int pru_rproc_debug_ss_set(void *data, u64 val)
 {
@@ -582,7 +595,7 @@ static void pru_rproc_create_debug_entries(struct rproc *rproc)
 		return;
 
 	debugfs_create_file("regs", 0400, rproc->dbg_dir,
-			    rproc, &pru_rproc_debug_regs_ops);
+			    rproc, &regs_fops);
 	debugfs_create_file("single_step", 0600, rproc->dbg_dir,
 			    rproc, &pru_rproc_debug_ss_fops);
 }
@@ -734,7 +747,7 @@ static int pru_rproc_stop(struct rproc *rproc)
 }
 
 /*
- * parse the custom interrupt map resource and configure the INTC
+ * parse the custom PRU interrupt map resource and configure the INTC
  * appropriately
  */
 static int pru_handle_vendor_intrmap(struct rproc *rproc,
@@ -744,22 +757,22 @@ static int pru_handle_vendor_intrmap(struct rproc *rproc,
 	struct pru_rproc *pru = rproc->priv;
 	struct pruss *pruss = pru->pruss;
 	struct pruss_event_chnl *event_chnl_map;
-	struct fw_rsc_custom_intrmap *intr_rsc0;
-	struct fw_rsc_custom_intrmap_k3 *intr_rsc1;
+	struct fw_rsc_pruss_intrmap *intr_rsc0;
+	struct fw_rsc_pruss_intrmap_k3 *intr_rsc1;
 	int i, ret;
 	u32 event_chnl_map_da, event_chnl_map_size;
 	s8 sys_evt, chnl, intr_no;
 	s8 *chnl_host_intr_map;
 	u8 max_system_events, max_pru_channels, max_pru_host_ints;
 
-	if (rsc->u.st.ver != 0 && rsc->u.st.ver != 1) {
-		dev_err(dev, "only custom ints resource versions 0 and 1 are supported\n");
+	if (rsc->u.st.st_ver != 0 && rsc->u.st.st_ver != 1) {
+		dev_err(dev, "only PRU interrupt resource versions 0 and 1 are supported\n");
 		return -EINVAL;
 	}
 
-	if (!rsc->u.st.ver) {
-		intr_rsc0 = (struct fw_rsc_custom_intrmap *)rsc->data;
-		event_chnl_map_da = intr_rsc0->event_chnl_map;
+	if (!rsc->u.st.st_ver) {
+		intr_rsc0 = (struct fw_rsc_pruss_intrmap *)rsc->data;
+		event_chnl_map_da = intr_rsc0->event_chnl_map_addr;
 		event_chnl_map_size = intr_rsc0->event_chnl_map_size;
 		chnl_host_intr_map = intr_rsc0->chnl_host_intr_map;
 		max_system_events = MAX_PRU_SYS_EVENTS;
@@ -767,11 +780,11 @@ static int pru_handle_vendor_intrmap(struct rproc *rproc,
 		max_pru_host_ints = MAX_PRU_HOST_INT;
 
 		dev_dbg(dev, "version %d event_chnl_map_size %d event_chnl_map_da 0x%x\n",
-			rsc->u.st.ver, intr_rsc0->event_chnl_map_size,
+			rsc->u.st.st_ver, intr_rsc0->event_chnl_map_size,
 			event_chnl_map_da);
 	} else {
-		intr_rsc1 = (struct fw_rsc_custom_intrmap_k3 *)rsc->data;
-		event_chnl_map_da = intr_rsc1->event_chnl_map;
+		intr_rsc1 = (struct fw_rsc_pruss_intrmap_k3 *)rsc->data;
+		event_chnl_map_da = intr_rsc1->event_chnl_map_addr;
 		event_chnl_map_size = intr_rsc1->event_chnl_map_size;
 		chnl_host_intr_map = intr_rsc1->chnl_host_intr_map;
 		max_system_events = MAX_PRU_SYS_EVENTS_K3;
@@ -779,25 +792,25 @@ static int pru_handle_vendor_intrmap(struct rproc *rproc,
 		max_pru_host_ints = MAX_PRU_HOST_INT_K3;
 
 		dev_dbg(dev, "version %d event_chnl_map_size %d event_chnl_map_da 0x%x\n",
-			rsc->u.st.ver, intr_rsc1->event_chnl_map_size,
+			rsc->u.st.st_ver, intr_rsc1->event_chnl_map_size,
 			event_chnl_map_da);
 	}
 
 	if (event_chnl_map_size < 0 ||
 	    event_chnl_map_size >= max_system_events) {
-		dev_err(dev, "custom ints resource has more events than present on hardware\n");
+		dev_err(dev, "PRU interrupt resource has more events than present on hardware\n");
 		return -EINVAL;
 	}
 
 	/*
-	 * XXX: The event_chnl_map mapping is currently a pointer in device
+	 * XXX: The event_chnl_map_addr mapping is currently a pointer in device
 	 * memory, evaluate if this needs to be directly in firmware file.
 	 */
 	event_chnl_map = pru_d_da_to_va(pru, event_chnl_map_da,
 					event_chnl_map_size *
 					sizeof(*event_chnl_map));
 	if (!event_chnl_map) {
-		dev_err(dev, "custom ints resource has inadequate event_chnl_map configuration\n");
+		dev_err(dev, "PRU interrupt resource has inadequate event_chnl_map configuration\n");
 		return -EINVAL;
 	}
 
@@ -844,7 +857,7 @@ static int pru_handle_vendor_intrmap(struct rproc *rproc,
 		dev_dbg(dev, "chnl-to-host[%d] -> %d\n", i, intr_no);
 	}
 
-	pru->fw_has_intc_rsc = true;
+	pru->fw_has_intc_rsc = 1;
 
 	ret = pruss_intc_configure(pruss, &pru->intc_config);
 	if (ret)
@@ -853,7 +866,7 @@ static int pru_handle_vendor_intrmap(struct rproc *rproc,
 	return ret;
 }
 
-/* PRU-specific custom resource handler */
+/* PRU-specific vendor resource handler */
 static int pru_rproc_handle_vendor_rsc(struct rproc *rproc,
 				       struct fw_rsc_vendor *rsc)
 {
@@ -861,14 +874,14 @@ static int pru_rproc_handle_vendor_rsc(struct rproc *rproc,
 	struct pru_rproc *pru = rproc->priv;
 	int ret = 0;
 
-	switch (rsc->u.st.type) {
+	switch (rsc->u.st.st_type) {
 	case PRUSS_RSC_INTRS:
 		if (!pru->dt_irqs)
 			ret = pru_handle_vendor_intrmap(rproc, rsc);
 		break;
 	default:
-		dev_err(dev, "%s: handling unknown type %d\n", __func__,
-			rsc->u.st.type);
+		dev_err(dev, "%s: cannot handle unknown type %d\n", __func__,
+			rsc->u.st.st_type);
 		ret = -EINVAL;
 	}
 
@@ -933,9 +946,9 @@ static void *pru_i_da_to_va(struct pru_rproc *pru, u32 da, int len)
 		return NULL;
 
 	if (da >= pru->iram_da &&
-	    da + len <= pru->iram_da + pru->mem_regions[PRU_MEM_IRAM].size) {
+	    da + len <= pru->iram_da + pru->mem_regions[PRU_IOMEM_IRAM].size) {
 		offset = da - pru->iram_da;
-		va = (__force void *)(pru->mem_regions[PRU_MEM_IRAM].va +
+		va = (__force void *)(pru->mem_regions[PRU_IOMEM_IRAM].va +
 				      offset);
 	}
 
@@ -1075,25 +1088,28 @@ pru_rproc_load_elf_segments(struct rproc *rproc, const struct firmware *fw)
 	return ret;
 }
 
-static struct rproc_fw_ops pru_rproc_k3_fw_ops = {
-	.load = pru_rproc_load_elf_segments,
-};
-
+/*
+ * compute PRU id based on the IRAM addresses. The PRU IRAMs are
+ * always at a particular offset within the PRUSS address space.
+ * The other alternative is to use static data for each core (not a
+ * hardware property to define it in DT), and the id can always be
+ * computated using this inherent address logic.
+ */
 static int pru_rproc_set_id(struct device_node *np, struct pru_rproc *pru)
 {
 	int ret = 0;
-	u32 mask1 = 0x34000;
-	u32 mask2 = 0x38000;
+	u32 mask1 = PRU0_IRAM_ADDR_MASK;
+	u32 mask2 = PRU1_IRAM_ADDR_MASK;
 
 	if (of_device_is_compatible(np, "ti,am654-rtu")) {
-		mask1 = 0x4000;
-		mask2 = 0x6000;
-		pru->is_rtu = true;
+		mask1 = RTU0_IRAM_ADDR_MASK;
+		mask2 = RTU1_IRAM_ADDR_MASK;
+		pru->is_rtu = 1;
 	}
 
-	if ((pru->mem_regions[0].pa & mask2) == mask2)
+	if ((pru->mem_regions[PRU_IOMEM_IRAM].pa & mask2) == mask2)
 		pru->id = PRUSS_PRU1;
-	else if ((pru->mem_regions[0].pa & mask1) == mask1)
+	else if ((pru->mem_regions[PRU_IOMEM_IRAM].pa & mask1) == mask1)
 		pru->id = PRUSS_PRU0;
 	else
 		ret = -EINVAL;
@@ -1112,8 +1128,7 @@ static int pru_rproc_probe(struct platform_device *pdev)
 	struct mbox_client *client;
 	struct resource *res;
 	int i, ret;
-	const char *mem_names[PRU_MEM_MAX] = { "iram", "control", "debug" };
-	const struct rproc_fw_ops *elf_ops;
+	const char *mem_names[PRU_IOMEM_MAX] = { "iram", "control", "debug" };
 
 	if (!np) {
 		dev_err(dev, "Non-DT platform device not supported\n");
@@ -1154,15 +1169,9 @@ static int pru_rproc_probe(struct platform_device *pdev)
 	if (of_device_is_compatible(np, "ti,am654-pru") ||
 	    of_device_is_compatible(np, "ti,am654-rtu")) {
 		/* use generic elf ops for undefined platform driver ops */
-		elf_ops = rproc->fw_ops;
-		pru_rproc_k3_fw_ops.find_rsc_table = elf_ops->find_rsc_table;
-		pru_rproc_k3_fw_ops.find_loaded_rsc_table =
-						elf_ops->find_loaded_rsc_table;
-		pru_rproc_k3_fw_ops.sanity_check = elf_ops->sanity_check;
-		pru_rproc_k3_fw_ops.get_boot_addr = elf_ops->get_boot_addr;
+		rproc->ops->load = pru_rproc_load_elf_segments;
 
-		rproc->fw_ops = &pru_rproc_k3_fw_ops;
-		pru->is_k3 = true;
+		pru->is_k3 = 1;
 	}
 
 	/* XXX: get this from match data if different in the future */

@@ -12,7 +12,11 @@ fdtoverlay-objs := fdtoverlay.o util.o
 fdtoverlay-objs += $(subst $(srctree)/$(src)/,,$(patsubst %.c,%.o,$(wildcard $(srctree)/$(src)/libfdt/*.c)))
 
 # Source files need to get at the userspace version of libfdt_env.h to compile
+HOST_EXTRACFLAGS := -I$(src)/libfdt
 
+# Generated files need one more search path to include headers in source tree
+HOSTCFLAGS_dtc-lexer.lex.o := -I$(src)
+HOSTCFLAGS_dtc-parser.tab.o := -I$(src)
 HOSTCFLAGS_DTC := -I$(src) -I$(src)/libfdt
 
 HOSTCFLAGS_checks.o := $(HOSTCFLAGS_DTC)
@@ -33,6 +37,3 @@ HOSTCFLAGS += $(HOSTCFLAGS_DTC)
 
 # dependencies on generated files need to be listed explicitly
 $(obj)/dtc-lexer.lex.o: $(obj)/dtc-parser.tab.h
-
-# generated files need to be cleaned explicitly
-clean-files	:= dtc-lexer.lex.c dtc-parser.tab.c dtc-parser.tab.h

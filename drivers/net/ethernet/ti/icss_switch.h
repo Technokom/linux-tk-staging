@@ -218,6 +218,40 @@
 	(ICSS_EMAC_FW_VLAN_FILTER_CTRL_BITMAP_OFFSET + \
 	 ICSS_EMAC_FW_VLAN_FILTER_CTRL_SIZE_BYTES)
 
+/* SRAM
+ * VLAN filter defines & offsets
+ */
+#define VLAN_FLTR_CTRL_BYTE                          0x1FE
+/* one bit field | 0 : VLAN filter disabled
+ *               | 1 : VLAN filter enabled
+ */
+#define VLAN_FLTR_CTRL_SHIFT                         0x0
+/* one bit field | 0 : untagged host rcv allowed
+ *               | 1 : untagged host rcv not allowed
+ */
+#define VLAN_FLTR_UNTAG_HOST_RCV_CTRL_SHIFT          0x1
+/* one bit field | 0 : priotag host rcv allowed
+ *               | 1 : priotag host rcv not allowed
+ */
+#define VLAN_FLTR_PRIOTAG_HOST_RCV_CTRL_SHIFT        0x2
+#define VLAN_FLTR_DIS                                0x0
+#define VLAN_FLTR_ENA                                0x1
+
+#define VLAN_FLTR_UNTAG_HOST_RCV_ALL                 0x0
+#define VLAN_FLTR_UNTAG_HOST_RCV_NAL                 0x1
+
+#define VLAN_FLTR_PRIOTAG_HOST_RCV_ALL               0x0
+#define VLAN_FLTR_PRIOTAG_HOST_RCV_NAL               0x1
+
+/* VID = 0 for priority tagged frames */
+#define VLAN_FLTR_PRIOTAG_VID                        0x0
+#define VLAN_FLTR_TBL_BASE_ADDR                      0x200
+/* 4096 bits = 512 bytes = 0x200 bytes */
+#define VLAN_FLTR_TBL_SIZE                           0x200
+
+#define VLAN_VID_MIN                                 0x0
+#define VLAN_VID_MAX                                 0x0FFF
+
 /* Multicast Filtering Offsets */
 /* Size requirements for Multicast filtering feature */
 #define ICSS_EMAC_FW_MULTICAST_TABLE_SIZE_BYTES                        256
@@ -244,7 +278,25 @@
 	(ICSS_EMAC_FW_MULTICAST_FILTER_DROP_CNT_OFFSET + \
 	 ICSS_EMAC_FW_MULTICAST_FILTER_DROP_CNT_SIZE_BYTES)
 
+/* Multicast filter defines & offsets
+ */
+#define M_MULTICAST_TABLE_SEARCH_OP_CONTROL_BIT         0xE0
+/* one byte field :
+ * 0 -> multicast filtering disabled
+ * 1 -> multicast filtering enabled
+ */
+#define MULTICAST_FILTER_DISABLED                       0x00
+#define MULTICAST_FILTER_ENABLED                        0x01
+#define MULTICAST_FILTER_MASK                           0xE4
+#define MULTICAST_FILTER_TABLE                          0x100
+#define MULTICAST_TABLE_SIZE                            256
+#define MULTICAST_FILTER_HOST_RCV_ALLOWED               0x01
+#define MULTICAST_FILTER_HOST_RCV_NOT_ALLOWED           0x00
+
 /* Shared RAM offsets for EMAC */
+
+/* Queue Descriptors */
+
 #define EMAC_P0_Q1_DESC_OFFSET_AFTER_BD	72
 
 /* Promiscuous mode control */
@@ -255,6 +307,29 @@
  * eof_48k_buffer_bd in prueth_mmap_sram_cfg
  */
 #define EMAC_PROMISCUOUS_MODE_OFFSET	4
+
+/* Below Rx Interrupt pacing defines. */
+/* shared RAM */
+/* 1 byte for pace control */
+#define INTR_PAC_STATUS_OFFSET                       0x1FAF
+#define INTR_PAC_STATUS_OFFSET_PRU1                  0x1FAE
+#define INTR_PAC_STATUS_OFFSET_PRU0                  0x1FAF
+/* Interrupt Pacing disabled, Adaptive logic disabled */
+#define INTR_PAC_DIS_ADP_LGC_DIS                     0x0
+/* Interrupt Pacing enabled, Adaptive logic disabled */
+#define INTR_PAC_ENA_ADP_LGC_DIS                     0x1
+/* Interrupt Pacing enabled, Adaptive logic enabled */
+#define INTR_PAC_ENA_ADP_LGC_ENA                     0x2
+
+/* 4 bytes | previous TS from eCAP TSCNT for PRU 0 */
+#define INTR_PAC_PREV_TS_OFFSET_PRU0                 0x1FB0
+/* 4 bytes | timer expiration value for PRU 0 */
+#define INTR_PAC_TMR_EXP_OFFSET_PRU0                 0x1FB4
+/* 4 bytes | previous TS from eCAP TSCNT for PRU 1 */
+#define INTR_PAC_PREV_TS_OFFSET_PRU1                 0x1FB8
+/* 4 bytes | timer expiration value for PRU 1 */
+#define INTR_PAC_TMR_EXP_OFFSET_PRU1                 0x1FBC
+#define INTR_PAC_PREV_TS_RESET_VAL                   0x0
 
 /* Shared RAM offsets for both Switch and EMAC */
 #define P0_Q1_BD_OFFSET		SRAM_START_OFFSET
@@ -268,5 +343,10 @@
  * direction and reset for PRP mode
  */
 #define PRUETH_TX_PRP_EMAC_MODE	BIT(0)
+
+/* 1 byte | 0 : Interrupt Pacing disabled | 1 : Interrupt Pacing enabled */
+#define INTR_PAC_STATUS_OFFSET_PRU1             0x1FAE
+/* 1 byte | 0 : Interrupt Pacing disabled | 1 : Interrupt Pacing enabled */
+#define INTR_PAC_STATUS_OFFSET_PRU0             0x1FAF
 
 #endif /* __ICSS_SWITCH_H */

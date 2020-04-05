@@ -1,18 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * PRU Remote Processor Messaging Driver
  *
- * Copyright (C) 2015-2018 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2015-2019 Texas Instruments Incorporated - http://www.ti.com/
  *	Jason Reeder <jreeder@ti.com>
  *	Suman Anna <s-anna@ti.com>
- *
- * This software is licensed under the terms of the GNU General Public
- * License version 2, as published by the Free Software Foundation, and
- * may be copied, distributed, and modified under those terms.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/kernel.h>
@@ -354,6 +346,5 @@ module_init(rpmsg_pru_init);
 module_exit(rpmsg_pru_exit);
 
 MODULE_AUTHOR("Jason Reeder <jreeder@ti.com>");
-MODULE_ALIAS("rpmsg:rpmsg-pru");
 MODULE_DESCRIPTION("PRU Remote Processor Messaging Driver");
 MODULE_LICENSE("GPL v2");

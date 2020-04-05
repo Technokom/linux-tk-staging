@@ -8,23 +8,28 @@
 #define __TIDSS_DRV_H__
 
 #include <linux/spinlock.h>
+#include <linux/rpmsg-remotedev/rpmsg-remotedev.h>
 
 struct tidss_device {
 	struct device *dev;		/* Underlying DSS device */
-	struct platform_device *pdev;	/* Underlying DSS platform device */
 	struct drm_device *ddev;	/* DRM device for DSS */
+
+	struct rpmsg_remotedev *rdev;
+	struct rpmsg_remotedev_display_resinfo rres;
 
 	struct drm_fbdev_cma *fbdev;
 
 	struct dispc_device *dispc;
-	const struct dispc_ops *dispc_ops;
+	const struct tidss_dispc_ops *dispc_ops;
 
-	const struct tidss_features *feat;
+	const struct tidss_features *features;
 
-	u32 num_crtcs;
+	unsigned int num_crtcs;
+	unsigned int num_v_crtcs;
 	struct drm_crtc *crtcs[8];
+	struct drm_crtc *v_crtcs[8];
 
-	u32 num_planes;
+	unsigned int num_planes;
 	struct drm_plane *planes[8];
 
 	spinlock_t wait_lock;	/* protects the irq masks */
@@ -32,10 +37,6 @@ struct tidss_device {
 	u64 irq_uf_mask;	/* underflow irq bits for all planes */
 
 	struct drm_atomic_state *saved_state;
-
-	struct drm_property *trans_key_mode_prop;
-	struct drm_property *trans_key_prop;
-	struct drm_property *background_color_prop;
 };
 
 struct tidss_features {

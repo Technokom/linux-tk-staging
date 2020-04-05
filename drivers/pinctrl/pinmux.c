@@ -22,7 +22,6 @@
 #include <linux/err.h>
 #include <linux/list.h>
 #include <linux/string.h>
-#include <linux/sysfs.h>
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 #include <linux/pinctrl/machine.h>
@@ -308,31 +307,8 @@ static int pinmux_func_name_to_selector(struct pinctrl_dev *pctldev,
 		selector++;
 	}
 
-	dev_err(pctldev->dev, "function '%s' not supported\n", function);
 	return -EINVAL;
 }
-
-int pinmux_save_context(struct pinctrl_dev *pctldev, const char *function)
-{
-	const struct pinmux_ops *pmxops = pctldev->desc->pmxops;
-
-	if (!pmxops || !pmxops->save_context)
-		return -EINVAL;
-
-	return pmxops->save_context(pctldev);
-}
-EXPORT_SYMBOL(pinmux_save_context);
-
-void pinmux_restore_context(struct pinctrl_dev *pctldev, const char *function)
-{
-	const struct pinmux_ops *pmxops = pctldev->desc->pmxops;
-
-	if (!pmxops || !pmxops->restore_context)
-		return;
-
-	pmxops->restore_context(pctldev);
-}
-EXPORT_SYMBOL(pinmux_restore_context);
 
 int pinmux_map_to_setting(const struct pinctrl_map *map,
 			  struct pinctrl_setting *setting)
@@ -515,8 +491,6 @@ void pinmux_disable_setting(const struct pinctrl_setting *setting)
 			continue;
 		}
 		if (desc->mux_setting == &(setting->data.mux)) {
-			desc->mux_setting = NULL;
-			/* And release the pin */
 			pin_free(pctldev, pins[i], NULL);
 		} else {
 			const char *gname;
@@ -641,7 +615,7 @@ static int pinmux_pins_show(struct seq_file *s, void *what)
 				   pctlops->get_group_name(pctldev,
 					desc->mux_setting->group));
 		else
-			seq_printf(s, "\n");
+			seq_putc(s, '\n');
 	}
 
 	mutex_unlock(&pctldev->mutex);
@@ -799,6 +773,16 @@ int pinmux_generic_add_function(struct pinctrl_dev *pctldev,
 				void *data)
 {
 	struct function_desc *function;
+	int selector;
+
+	if (!name)
+		return -EINVAL;
+
+	selector = pinmux_func_name_to_selector(pctldev, name);
+	if (selector >= 0)
+		return selector;
+
+	selector = pctldev->num_functions;
 
 	function = devm_kzalloc(pctldev->dev, sizeof(*function), GFP_KERNEL);
 	if (!function)
@@ -809,12 +793,11 @@ int pinmux_generic_add_function(struct pinctrl_dev *pctldev,
 	function->num_group_names = num_groups;
 	function->data = data;
 
-	radix_tree_insert(&pctldev->pin_function_tree, pctldev->num_functions,
-			  function);
+	radix_tree_insert(&pctldev->pin_function_tree, selector, function);
 
 	pctldev->num_functions++;
 
-	return 0;
+	return selector;
 }
 EXPORT_SYMBOL_GPL(pinmux_generic_add_function);
 

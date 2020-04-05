@@ -30,18 +30,15 @@
 #include <media/v4l2-device.h>
 #include <media/v4l2-event.h>
 #include <media/v4l2-ioctl.h>
-#include <media/v4l2-ctrls.h>
 #include <media/v4l2-fh.h>
-#include <media/v4l2-event.h>
-#include <media/v4l2-common.h>
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-dma-contig.h>
 #include "cal_regs.h"
 
 #define CAL_MODULE_NAME "cal"
 
-#define MAX_WIDTH 1920
-#define MAX_HEIGHT 1200
+#define MAX_WIDTH_BYTES (8192 * 8)
+#define MAX_HEIGHT_LINES 16383
 
 #define CAL_VERSION "0.1.0"
 
@@ -347,7 +344,6 @@ static struct cal_data am654_cal_data = {
 
 	.flags = 0,
 };
-
 
 /*
  * there is one cal_dev structure in the driver, it is shared by
@@ -661,7 +657,7 @@ static void i913_errata(struct cal_dev *dev, unsigned int port)
 	u32 reg10 = reg_read(dev->cc[port], CAL_CSI2_PHY_REG10);
 
 	set_field(&reg10, CAL_CSI2_PHY_REG0_HSCLOCKCONFIG_DISABLE,
-		    CAL_CSI2_PHY_REG10_I933_LDO_DISABLE_MASK);
+		  CAL_CSI2_PHY_REG10_I933_LDO_DISABLE_MASK);
 
 	cal_dbg(1, dev, "CSI2_%d_REG10 = 0x%08x\n", port, reg10);
 	reg_write(dev->cc[port], CAL_CSI2_PHY_REG10, reg10);
@@ -1345,15 +1341,21 @@ static int cal_calc_format_size(struct cal_ctx *ctx,
 				const struct cal_fmt *fmt,
 				struct v4l2_format *f)
 {
-	u32 bpl;
+	u32 bpl, max_width;
 
 	if (!fmt) {
 		ctx_dbg(3, ctx, "No cal_fmt provided!\n");
 		return -EINVAL;
 	}
 
-	v4l_bound_align_image(&f->fmt.pix.width, 48, MAX_WIDTH, 2,
-			      &f->fmt.pix.height, 32, MAX_HEIGHT, 0, 0);
+	/*
+	 * Maximum width is bound by the DMA max width in bytes.
+	 * We need to recalculate the actual maxi width depending on the
+	 * number of bytes per pixels required.
+	 */
+	max_width = MAX_WIDTH_BYTES / (ALIGN(fmt->bpp, 8) >> 3);
+	v4l_bound_align_image(&f->fmt.pix.width, 48, max_width, 2,
+			      &f->fmt.pix.height, 32, MAX_HEIGHT_LINES, 0, 0);
 
 	bpl = (f->fmt.pix.width * ALIGN(fmt->bpp, 8)) >> 3;
 	f->fmt.pix.bytesperline = ALIGN(bpl, 16);
@@ -1669,6 +1671,12 @@ static int cal_start_streaming(struct vb2_queue *vq, unsigned int count)
 	if (ret < 0)
 		goto err;
 
+	ret = v4l2_subdev_call(ctx->sensor, core, s_power, 1);
+	if (ret < 0 && ret != -ENOIOCTLCMD && ret != -ENODEV) {
+		ctx_err(ctx, "power on failed in subdev\n");
+		goto err;
+	}
+
 	cal_runtime_get(ctx->dev);
 
 	csi2_ctx_config(ctx);
@@ -1682,6 +1690,7 @@ static int cal_start_streaming(struct vb2_queue *vq, unsigned int count)
 
 	ret = v4l2_subdev_call(ctx->sensor, video, s_stream, 1);
 	if (ret) {
+		v4l2_subdev_call(ctx->sensor, core, s_power, 0);
 		ctx_err(ctx, "stream on failed in subdev\n");
 		cal_runtime_put(ctx->dev);
 		goto err;
@@ -1697,10 +1706,15 @@ static int cal_start_streaming(struct vb2_queue *vq, unsigned int count)
 	return 0;
 
 err:
+	spin_lock_irqsave(&ctx->slock, flags);
+	vb2_buffer_done(&ctx->cur_frm->vb.vb2_buf, VB2_BUF_STATE_QUEUED);
+	ctx->cur_frm = NULL;
+	ctx->next_frm = NULL;
 	list_for_each_entry_safe(buf, tmp, &dma_q->active, list) {
 		list_del(&buf->list);
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_QUEUED);
 	}
+	spin_unlock_irqrestore(&ctx->slock, flags);
 	return ret;
 }
 
@@ -1710,6 +1724,7 @@ static void cal_stop_streaming(struct vb2_queue *vq)
 	struct cal_dmaqueue *dma_q = &ctx->vidq;
 	struct cal_buffer *buf, *tmp;
 	unsigned long flags;
+	int ret;
 
 	csi2_ppi_disable(ctx);
 	disable_irqs(ctx);
@@ -1717,6 +1732,10 @@ static void cal_stop_streaming(struct vb2_queue *vq)
 
 	if (v4l2_subdev_call(ctx->sensor, video, s_stream, 0))
 		ctx_err(ctx, "stream off failed in subdev\n");
+
+	ret = v4l2_subdev_call(ctx->sensor, core, s_power, 0);
+	if (ret < 0 && ret != -ENOIOCTLCMD && ret != -ENODEV)
+		ctx_err(ctx, "power off failed in subdev\n");
 
 	/* Release all active buffers */
 	spin_lock_irqsave(&ctx->slock, flags);
@@ -1885,6 +1904,11 @@ static int cal_async_complete(struct v4l2_async_notifier *notifier)
 
 	return 0;
 }
+
+static const struct v4l2_async_notifier_operations cal_async_ops = {
+	.bound = cal_async_bound,
+	.complete = cal_async_complete,
+};
 
 static int cal_complete_ctx(struct cal_ctx *ctx)
 {
@@ -2064,7 +2088,7 @@ static int of_cal_create_instance(struct cal_ctx *ctx, int inst)
 		goto cleanup_exit;
 	}
 	asd->match_type = V4L2_ASYNC_MATCH_FWNODE;
-	asd->match.fwnode.fwnode = of_fwnode_handle(sensor_node);
+	asd->match.fwnode = of_fwnode_handle(sensor_node);
 
 	remote_ep = of_graph_get_remote_endpoint(ep_node);
 	if (!remote_ep) {
@@ -2100,8 +2124,7 @@ static int of_cal_create_instance(struct cal_ctx *ctx, int inst)
 	ctx->asd_list[0] = asd;
 	ctx->notifier.subdevs = ctx->asd_list;
 	ctx->notifier.num_subdevs = 1;
-	ctx->notifier.bound = cal_async_bound;
-	ctx->notifier.complete = cal_async_complete;
+	ctx->notifier.ops = &cal_async_ops;
 	ret = v4l2_async_notifier_register(&ctx->v4l2_dev,
 					   &ctx->notifier);
 	if (ret) {

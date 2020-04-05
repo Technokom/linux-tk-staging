@@ -84,8 +84,6 @@ struct mmc_fixup {
 #define CID_MANFID_HYNIX	0x90
 #define CID_MANFID_NUMONYX	0xFE
 
-#define CID_NAME_R1J56L	"R1J56L"
-
 #define END_FIXUP { NULL }
 
 #define _FIXUP_EXT(_name, _manfid, _oemid, _rev_start, _rev_end,	\
@@ -149,6 +147,12 @@ static inline void __maybe_unused add_quirk(struct mmc_card *card, int data)
 static inline void __maybe_unused remove_quirk(struct mmc_card *card, int data)
 {
 	card->quirks &= ~data;
+}
+
+static inline void __maybe_unused add_limit_rate_quirk(struct mmc_card *card,
+						       int data)
+{
+	card->quirk_max_rate = data;
 }
 
 /*
@@ -221,11 +225,6 @@ static inline int mmc_card_broken_irq_polling(const struct mmc_card *c)
 static inline int mmc_card_broken_hpi(const struct mmc_card *c)
 {
 	return c->quirks & MMC_QUIRK_BROKEN_HPI;
-}
-
-static inline int mmc_card_long_cache_ctrl(const struct mmc_card *c)
-{
-	return c->quirks & MMC_QUIRK_LONG_CACHE_ENABLE_TIME;
 }
 
 #endif

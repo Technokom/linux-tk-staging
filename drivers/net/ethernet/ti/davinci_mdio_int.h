@@ -12,11 +12,10 @@
 #include <linux/module.h>
 
 struct davinci_mdio_data;
-struct davinci_mdio_data *davinci_mdio_create(
-			struct device *dev,
-			struct device_node *node,
-			void __iomem *reg_base,
-			const char *clk_name);
+struct davinci_mdio_data *davinci_mdio_create(struct device *dev,
+					      struct device_node *node,
+					      void __iomem *reg_base,
+					      const char *clk_name);
 void davinci_mdio_release(struct davinci_mdio_data *mdio);
 
 #endif /* DAVINCI_MDIO_INT_H_ */

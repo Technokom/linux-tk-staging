@@ -2,7 +2,7 @@
 /*
  * Texas Instruments TI-SCI Processor Controller Helper Functions
  *
- * Copyright (C) 2018 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2018-2019 Texas Instruments Incorporated - http://www.ti.com/
  *	Suman Anna
  */
 

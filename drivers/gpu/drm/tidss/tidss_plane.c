@@ -17,22 +17,34 @@
 #include "tidss_drv.h"
 #include "tidss_plane.h"
 
-static void tidss_plane_info_init(struct drm_plane_state *state,
-				  struct tidss_plane_info *info)
+dma_addr_t dispc7_plane_state_paddr(const struct drm_plane_state *state)
 {
-	memset(info, 0, sizeof(*info));
+	struct drm_framebuffer *fb = state->fb;
+	struct drm_gem_cma_object *gem;
+	u32 x = state->src_x >> 16;
+	u32 y = state->src_y >> 16;
 
-	info->fourcc		= state->fb->format->format;
-	info->pos_x		= state->crtc_x;
-	info->pos_y		= state->crtc_y;
-	info->out_width		= state->crtc_w;
-	info->out_height	= state->crtc_h;
-	info->width		= state->src_w >> 16;
-	info->height		= state->src_h >> 16;
-	info->global_alpha	= state->alpha >> 8;
-	info->zorder		= state->normalized_zpos;
-	info->color_encoding	= state->color_encoding;
-	info->color_range	= state->color_range;
+	gem = drm_fb_cma_get_gem_obj(state->fb, 0);
+
+	return gem->paddr + fb->offsets[0] + x * fb->format->cpp[0] +
+		y * fb->pitches[0];
+}
+
+dma_addr_t dispc7_plane_state_p_uv_addr(const struct drm_plane_state *state)
+{
+	struct drm_framebuffer *fb = state->fb;
+	struct drm_gem_cma_object *gem;
+	u32 x = state->src_x >> 16;
+	u32 y = state->src_y >> 16;
+
+	if (WARN_ON(state->fb->format->num_planes != 2))
+		return 0;
+
+	gem = drm_fb_cma_get_gem_obj(fb, 1);
+
+	return gem->paddr + fb->offsets[1] +
+		(x * fb->format->cpp[1] / fb->format->hsub) +
+		(y * fb->pitches[1] / fb->format->vsub);
 }
 
 static int tidss_plane_atomic_check(struct drm_plane *plane,
@@ -41,9 +53,7 @@ static int tidss_plane_atomic_check(struct drm_plane *plane,
 	struct drm_device *ddev = plane->dev;
 	struct tidss_device *tidss = ddev->dev_private;
 	struct drm_crtc_state *crtc_state;
-	struct drm_rect clip;
 	struct tidss_plane *tplane = to_tidss_plane(plane);
-	struct tidss_plane_info info;
 	const struct drm_format_info *finfo;
 	u32 hw_videoport;
 	int ret;
@@ -62,6 +72,13 @@ static int tidss_plane_atomic_check(struct drm_plane *plane,
 	crtc_state = drm_atomic_get_crtc_state(state->state, state->crtc);
 	if (IS_ERR(crtc_state))
 		return PTR_ERR(crtc_state);
+
+	ret = drm_atomic_helper_check_plane_state(state, crtc_state,
+						  0,
+						  INT_MAX,
+						  true, true);
+	if (ret < 0)
+		return ret;
 
 	/*
 	 * The HW is only able to start drawing at subpixel boundary
@@ -98,26 +115,14 @@ static int tidss_plane_atomic_check(struct drm_plane *plane,
 		return -EINVAL;
 	}
 
-	clip.x1 = 0;
-	clip.y1 = 0;
-	clip.x2 = crtc_state->adjusted_mode.hdisplay;
-	clip.y2 = crtc_state->adjusted_mode.vdisplay;
-	ret = drm_plane_helper_check_state(state, &clip,
-					   0, INT_MAX,
-					   true, true);
-	if (ret < 0)
-		return ret;
-
 	if (!state->visible)
 		return 0;
 
 	hw_videoport = to_tidss_crtc(state->crtc)->hw_videoport;
 
-	tidss_plane_info_init(state, &info);
-
 	return tidss->dispc_ops->plane_check(tidss->dispc,
 					     tplane->hw_plane_id,
-					     &info, hw_videoport);
+					     state, hw_videoport);
 }
 
 static void tidss_plane_atomic_update(struct drm_plane *plane,
@@ -126,13 +131,9 @@ static void tidss_plane_atomic_update(struct drm_plane *plane,
 	struct drm_device *ddev = plane->dev;
 	struct tidss_device *tidss = ddev->dev_private;
 	struct tidss_plane *tplane = to_tidss_plane(plane);
-	struct tidss_plane_info info;
-	int ret;
-	u32 hw_videoport;
 	struct drm_plane_state *state = plane->state;
-	struct drm_framebuffer *fb = state->fb;
-	uint32_t x, y;
-	struct drm_gem_cma_object *gem;
+	u32 hw_videoport;
+	int ret;
 
 	dev_dbg(ddev->dev, "%s\n", __func__);
 
@@ -144,33 +145,8 @@ static void tidss_plane_atomic_update(struct drm_plane *plane,
 
 	hw_videoport = to_tidss_crtc(state->crtc)->hw_videoport;
 
-	tidss_plane_info_init(state, &info);
-
-	x = state->src_x >> 16;
-	y = state->src_y >> 16;
-
-	gem = drm_fb_cma_get_gem_obj(fb, 0);
-
-	info.paddr = gem->paddr + fb->offsets[0] + x * fb->format->cpp[0] +
-		     y * fb->pitches[0];
-
-	info.fb_width  = fb->pitches[0] / fb->format->cpp[0];
-	info.cpp = fb->format->cpp[0];
-
-	if (fb->format->num_planes == 2) {
-		gem = drm_fb_cma_get_gem_obj(fb, 1);
-
-		info.p_uv_addr = gem->paddr +
-				 fb->offsets[1] +
-				 (x * fb->format->cpp[1] / fb->format->hsub) +
-				 (y * fb->pitches[1] / fb->format->vsub);
-
-		info.fb_width_uv = fb->pitches[1] / fb->format->cpp[1];
-		info.cpp_uv = fb->format->cpp[1];
-	}
-
 	ret = tidss->dispc_ops->plane_setup(tidss->dispc, tplane->hw_plane_id,
-					    &info, hw_videoport);
+					    state, hw_videoport);
 
 	if (ret) {
 		dev_err(plane->dev->dev, "Failed to setup plane %d\n",
@@ -215,12 +191,12 @@ struct tidss_plane *tidss_plane_create(struct tidss_device *tidss,
 				       u32 crtc_mask, const u32 *formats,
 				       u32 num_formats)
 {
-	enum drm_plane_type type;
-	uint32_t possible_crtcs;
-	uint num_planes = tidss->dispc_ops->get_num_planes(tidss->dispc);
-	int ret;
-	struct tidss_plane *tplane;
 	const struct tidss_plane_feat *pfeat;
+	struct tidss_plane *tplane;
+	enum drm_plane_type type;
+	u32 possible_crtcs;
+	u32 num_planes = tidss->dispc_ops->get_num_planes(tidss->dispc);
+	int ret;
 
 	pfeat = tidss->dispc_ops->plane_feat(tidss->dispc, hw_plane_id);
 

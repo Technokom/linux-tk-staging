@@ -9,7 +9,10 @@
 /* AM437x GP EVM with HDMI output */
 
 #include "am437x-gp-evm.dts"
-#include <dt-bindings/sound/sii9022-audio.h>
+
+/delete-node/ &lcd0;
+
+#include <dt-bindings/sound/sii902x-audio.h>
 
 / {
 	aliases {
@@ -43,8 +46,13 @@
 
 		simple-audio-card,codec {
 			sound-dai = <&sii9022>;
-			system-clock-frequency = <12000000>;
 		};
+	};
+
+	sii9022_mclk: sii9022_mclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <12000000>;
 	};
 };
 
@@ -53,6 +61,10 @@
 };
 
 &sound0 {
+	status = "disabled";
+};
+
+&tlv320aic3106 {
 	status = "disabled";
 };
 
@@ -71,6 +83,8 @@
 			0
 			0
 		>;
+		clocks = <&sii9022_mclk>;
+		clock-names = "mclk";
 
 		ports {
 			#address-cells = <1>;

@@ -53,6 +53,9 @@ Recommended properies:
 - syscon-phy-power : phandle/offset pair. Phandle to the system control
   module and the register offset to power on/off the PHY.
 
+Optional properties:
+ - ti,dis-chg-det-quirk : when set the phy will disable CHG_DET logic
+
 This is usually a subnode of ocp2scp to which it is connected.
 
 usb2phy@4a0ad080 {
@@ -121,7 +124,7 @@ usb3phy@4a084400 {
 			"refclk";
 };
 
-sata_phy: phy@4A096000 {
+sata_phy: phy@4a096000 {
 	compatible = "ti,phy-pipe3-sata";
 	reg = <0x4A096000 0x80>, /* phy_rx */
 	      <0x4A096400 0x64>, /* phy_tx */
@@ -135,7 +138,7 @@ sata_phy: phy@4A096000 {
 };
 
 
-TI AM654 PHY
+TI AM654 SERDES
 
 Required properties:
  - compatible: Should be "ti,phy-am654-serdes"

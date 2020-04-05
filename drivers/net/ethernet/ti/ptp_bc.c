@@ -1,16 +1,7 @@
-/*
- * TI PTP Boundary Clock Internal Sync Monitor
+// SPDX-License-Identifier: GPL-2.0
+/* TI PTP Boundary Clock Internal Sync Monitor
  *
  * Copyright (C) 2015-2017 Texas Instruments Incorporated - http://www.ti.com
-
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 #include <linux/gpio.h>
 #include <linux/module.h>
@@ -62,6 +53,10 @@ static void ptp_bc_free_clk_id(int clkid)
 
 static void ptp_bc_clock_pps_mux_reset(void)
 {
+	if (bc_clk_pps_mux_sel0_gpio < 0 ||
+	    bc_clk_pps_mux_sel1_gpio < 0)
+		return;
+
 	if (bc_mux_ctrl_handler) {
 		spin_lock_bh(bc_mux_lock);
 		bc_mux_ctrl_handler(bc_mux_ctrl_ctx, false);
@@ -79,9 +74,13 @@ static void ptp_bc_clock_pps_mux_reset(void)
 static void ptp_bc_clock_pps_mux_sel(int clkid)
 {
 	if (clkid < 0 || clkid >= MAX_CLKS) {
-		pr_err("ptp_bc_clock_pps_mux_sel: invalid clkid: %d\n", clkid);
+		pr_err("%s: invalid clkid: %d\n", __func__, clkid);
 		return;
 	}
+
+	if (bc_clk_pps_mux_sel0_gpio < 0 ||
+	    bc_clk_pps_mux_sel1_gpio < 0)
+		return;
 
 	if (bc_mux_ctrl_handler) {
 		spin_lock_bh(bc_mux_lock);
@@ -105,7 +104,7 @@ static void ptp_bc_clock_pps_mux_sel(int clkid)
 		break;
 
 	default:
-		pr_err("ptp_bc_clock_pps_mux_sel(%d): invalid type: %d\n",
+		pr_err("%s(%d): invalid type: %d\n", __func__,
 		       clkid, clock_type[clkid]);
 		break;
 	}
@@ -121,6 +120,9 @@ bool ptp_bc_clock_sync_enable(int clkid, int enable)
 {
 	unsigned long flags;
 	bool allow = false;
+
+	if (!ptp_bc_initialized)
+		return true;
 
 	if (clkid < 0 || clkid >= MAX_CLKS)
 		return false;
@@ -171,7 +173,7 @@ int ptp_bc_clock_register(int clocktype)
 	int id = -1;
 
 	if (!ptp_bc_initialized) {
-		pr_err("ptp_bc error: NOT initialized.\n");
+		pr_debug("ptp_bc error: NOT initialized.\n");
 		return -1;
 	}
 
@@ -205,23 +207,32 @@ EXPORT_SYMBOL_GPL(ptp_bc_clock_unregister);
 void ptp_bc_mux_ctrl_register(void *ctx, spinlock_t *lock,
 			      ptp_bc_mux_ctrl_handle_t handler)
 {
-	bc_mux_ctrl_handler = handler;
-	bc_mux_ctrl_ctx = ctx;
-	bc_mux_lock = lock;
+	if (!ptp_bc_initialized)
+		return;
+
+	if (ctx && lock && handler) {
+		bc_mux_ctrl_handler = handler;
+		bc_mux_ctrl_ctx = ctx;
+		bc_mux_lock = lock;
+	}
 }
 EXPORT_SYMBOL_GPL(ptp_bc_mux_ctrl_register);
 
 static int ptp_bc_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
-	int ret, gpio;
+	int ret = 0, gpio;
 
 	spin_lock_init(&bc_sync_lock);
 	bc_clk_sync_enabled = 0;
 	bc_clocks_registered = 0;
+	bc_clk_pps_mux_sel0_gpio = -1;
+	bc_clk_pps_mux_sel1_gpio = -1;
+	ptp_bc_initialized  = true;
+
 	gpio = of_get_named_gpio(np, "pps-sel0-gpios", 0);
-	if (!gpio_is_valid(bc_clk_pps_mux_sel0_gpio)) {
-		dev_err(&pdev->dev, "failed to parse pps-sel0 gpio\n");
+	if (!gpio_is_valid(gpio)) {
+		dev_dbg(&pdev->dev, "failed to parse pps-sel0 gpio\n");
 		return -EINVAL;
 	}
 
@@ -234,8 +245,8 @@ static int ptp_bc_probe(struct platform_device *pdev)
 	bc_clk_pps_mux_sel0_gpio = gpio;
 
 	gpio = of_get_named_gpio(np, "pps-sel1-gpios", 0);
-	if (!gpio_is_valid(bc_clk_pps_mux_sel1_gpio)) {
-		dev_err(&pdev->dev, "failed to parse pps-sel1 gpio\n");
+	if (!gpio_is_valid(gpio)) {
+		dev_dbg(&pdev->dev, "failed to parse pps-sel1 gpio\n");
 		devm_gpio_free(&pdev->dev, bc_clk_pps_mux_sel0_gpio);
 		return -EINVAL;
 	}
@@ -249,7 +260,6 @@ static int ptp_bc_probe(struct platform_device *pdev)
 	gpio_direction_output(gpio, 0);
 	bc_clk_pps_mux_sel1_gpio = gpio;
 
-	ptp_bc_initialized  = true;
 	return 0;
 }
 

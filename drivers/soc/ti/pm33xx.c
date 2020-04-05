@@ -1,19 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * AM33XX Power Management Routines
  *
- * Copyright (C) 2012-2017 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2012-2018 Texas Instruments Incorporated - http://www.ti.com/
  *	Vaibhav Bedia, Dave Gerlach
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation version 2.
- *
- * This program is distributed "as is" WITHOUT ANY WARRANTY of any
- * kind, whether express or implied; without even the implied warranty
- * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
+#include <linux/clk.h>
 #include <linux/cpu.h>
 #include <linux/err.h>
 #include <linux/genalloc.h>
@@ -80,6 +73,7 @@ static struct wkup_m3_wakeup_src rtc_alarm_wakeup = {
 static struct wkup_m3_wakeup_src rtc_ext_wakeup = {
 	.irq_nr = 0, .src = "Ext wakeup",
 };
+
 #endif
 
 static u32 sram_suspend_address(unsigned long addr)
@@ -163,6 +157,9 @@ static int __init am43xx_map_gic(void)
 
 #ifdef CONFIG_SUSPEND
 
+static int rtc_only_idle;
+static int retrigger_irq;
+
 struct wkup_m3_wakeup_src rtc_wake_src(void)
 {
 	u32 i;
@@ -195,12 +192,14 @@ static int am33xx_pm_suspend(suspend_state_t suspend_state)
 		pm_ops->prepare_rtc_suspend();
 		pm_ops->save_context();
 		suspend_wfi_flags |= WFI_FLAG_RTC_ONLY;
+		clk_save_context();
 		ret = pm_ops->soc_suspend(suspend_state, am33xx_rtc_only_idle,
 					  suspend_wfi_flags);
 
 		suspend_wfi_flags &= ~WFI_FLAG_RTC_ONLY;
 
 		if (!ret) {
+			clk_restore_context();
 			pm_ops->restore_context();
 			m3_ipc->ops->set_rtc_only(m3_ipc);
 			am33xx_push_sram_idle();
@@ -294,13 +293,12 @@ static void am33xx_pm_end(void)
 	u32 val = 0;
 
 	m3_ipc->ops->finish_low_power(m3_ipc);
-
 	if (rtc_only_idle) {
 		if (retrigger_irq)
 			/*
 			 * 32 bits of Interrupt Set-Pending correspond to 32
 			 * 32 interupts. Compute the bit offset of the
-			 * Interrupt and set that particular bit.
+			 * Interrupt and set that particular bit
 			 * Compute the register offset by dividing interrupt
 			 * number by 32 and mutiplying by 4
 			 */
@@ -433,7 +431,6 @@ static int am33xx_pm_rtc_setup(void)
 
 		nvmem_device_read(omap_rtc->nvmem, RTC_SCRATCH_MAGIC_REG * 4,
 				  4, (void *)&rtc_magic_val);
-
 		if ((rtc_magic_val & 0xffff) != RTC_REG_BOOT_MAGIC)
 			pr_warn("PM: bootloader does not support rtc-only!\n");
 
@@ -442,7 +439,6 @@ static int am33xx_pm_rtc_setup(void)
 		val = pm_sram->resume_address;
 		nvmem_device_write(omap_rtc->nvmem, RTC_SCRATCH_RESUME_REG * 4,
 				   4, (void *)&val);
-
 	} else {
 		pr_warn("PM: no-rtc available, rtc-only mode disabled.\n");
 	}
@@ -477,13 +473,13 @@ static int am33xx_pm_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	pm33xx_dev = dev;
-
 	m3_ipc = wkup_m3_ipc_get();
 	if (!m3_ipc) {
 		pr_err("PM: Cannot get wkup_m3_ipc handle\n");
 		return -EPROBE_DEFER;
 	}
+
+	pm33xx_dev = dev;
 
 	ret = am33xx_pm_alloc_sram();
 	if (ret)

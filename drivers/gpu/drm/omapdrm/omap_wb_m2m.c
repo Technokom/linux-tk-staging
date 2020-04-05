@@ -51,12 +51,12 @@ static bool wbm2m_convert(struct wbm2m_dev *dev, enum omap_plane_id src_plane,
 
 	/* configure input */
 
-	r = priv->dispc_ops->ovl_setup(src_plane, src_info, &t, true,
-		OMAP_DSS_CHANNEL_WB);
+	r = priv->dispc_ops->ovl_setup(priv->dispc, src_plane, src_info, &t,
+				       true, OMAP_DSS_CHANNEL_WB);
 	if (r)
 		return false;
 
-	priv->dispc_ops->ovl_enable(src_plane, true);
+	priv->dispc_ops->ovl_enable(priv->dispc, src_plane, true);
 
 	/* configure output */
 
@@ -78,13 +78,14 @@ static bool wbm2m_convert(struct wbm2m_dev *dev, enum omap_plane_id src_plane,
 		wb_channel = DSS_WB_OVL3; break;
 	}
 
-	r = priv->dispc_ops->wb_setup(wb_info, true, &t, wb_channel);
+	r = priv->dispc_ops->wb_setup(priv->dispc, wb_info, true, &t,
+				      wb_channel);
 	if (r) {
-		priv->dispc_ops->ovl_enable(src_plane, false);
+		priv->dispc_ops->ovl_enable(priv->dispc, src_plane, false);
 		return false;
 	}
 
-	priv->dispc_ops->ovl_enable(OMAP_DSS_WB, true);
+	priv->dispc_ops->ovl_enable(priv->dispc, OMAP_DSS_WB, true);
 
 	return true;
 }
@@ -276,7 +277,8 @@ static void device_run(void *priv)
 		&ctx, d_vb->index,
 		wb_info.width, wb_info.height, wb_info.buf_width);
 
-	ok = wbm2m_convert(dev, omap_plane_id(dev->plane), &src_info, &wb_info);
+	ok = wbm2m_convert(dev, omap_plane_id_wb(dev->plane), &src_info,
+			   &wb_info);
 	if (!ok) {
 		log_err(dev,
 			"Conversion setup failed, check source and destination parameters\n"
@@ -296,8 +298,6 @@ static void device_run(void *priv)
 void wbm2m_irq(struct wbm2m_dev *wbm2m, u32 irqstatus)
 {
 	struct wbm2m_ctx *ctx;
-	struct wb_q_data *d_q_data;
-	struct wb_q_data *s_q_data;
 	struct vb2_v4l2_buffer *s_vb, *d_vb;
 	unsigned long flags;
 
@@ -339,11 +339,8 @@ void wbm2m_irq(struct wbm2m_dev *wbm2m, u32 irqstatus)
 	log_dbg(wbm2m, "ctx %pa sequence %d\n",
 		&ctx, ctx->sequence);
 
-	d_q_data = &ctx->q_data[Q_DATA_DST];
 	d_vb->field = V4L2_FIELD_NONE;
 	ctx->sequence++;
-
-	s_q_data = &ctx->q_data[Q_DATA_SRC];
 
 	spin_lock_irqsave(&wbm2m->lock, flags);
 
@@ -873,7 +870,7 @@ static int wbm2m_start_streaming(struct vb2_queue *q, unsigned int count)
 
 	ctx->sequence = 0;
 
-	priv->dispc_ops->runtime_get();
+	priv->dispc_ops->runtime_get(priv->dispc);
 	atomic_inc(&ctx->dev->dev->irq_enabled);
 
 	return 0;
@@ -915,14 +912,14 @@ static void wbm2m_stop_streaming(struct vb2_queue *q)
 		 * DRA7xx errata i829 (Reusing Pipe Connected To Writeback
 		 * Pipeline On The Fly To An Active Panel)
 		 */
-		priv->dispc_ops->ovl_enable(omap_plane_id(ctx->dev->plane),
+		priv->dispc_ops->ovl_enable(priv->dispc,
+					    omap_plane_id_wb(ctx->dev->plane),
 					    false);
-		priv->dispc_ops->ovl_enable(OMAP_DSS_WB, true);
-		priv->dispc_ops->ovl_enable(OMAP_DSS_WB, false);
-
+		priv->dispc_ops->ovl_enable(priv->dispc, OMAP_DSS_WB, true);
+		priv->dispc_ops->ovl_enable(priv->dispc, OMAP_DSS_WB, false);
 	}
 
-	priv->dispc_ops->runtime_put();
+	priv->dispc_ops->runtime_put(priv->dispc);
 }
 
 static struct vb2_ops wbm2m_qops = {

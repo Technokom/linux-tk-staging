@@ -1,5 +1,5 @@
-/*
- * AF_RPMSG: Remote processor messaging sockets
+// SPDX-License-Identifier: GPL-2.0
+/* AF_RPMSG: Remote processor messaging sockets
  *
  * Copyright (C) 2011-2018 Texas Instruments Incorporated - http://www.ti.com/
  *
@@ -7,15 +7,6 @@
  * Robert Tivy <rtivy@ti.com>
  * G Anthony <a0783926@ti.com>
  * Suman Anna <s-anna@ti.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #define pr_fmt(fmt)    "%s: " fmt, __func__
@@ -210,6 +201,8 @@ static int rpmsg_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 	err = rpmsg_send(rpsk->rpdev->ept, payload, len);
 	if (err)
 		pr_err("rpmsg_send failed: %d\n", err);
+	else
+		err = len;
 
 out:
 	release_sock(sk);
@@ -276,31 +269,31 @@ out_free:
 	return ret;
 }
 
-static unsigned int rpmsg_sock_poll(struct file *file, struct socket *sock,
-				    poll_table *wait)
+static __poll_t rpmsg_sock_poll(struct file *file, struct socket *sock,
+				poll_table *wait)
 {
 	struct sock *sk = sock->sk;
-	unsigned int mask = 0;
+	__poll_t mask = 0;
 
 	poll_wait(file, sk_sleep(sk), wait);
 
 	/* exceptional events? */
 	if (sk->sk_err || !skb_queue_empty(&sk->sk_error_queue))
-		mask |= POLLERR;
+		mask |= EPOLLERR;
 	if (sk->sk_state == RPMSG_ERROR)
-		mask |= POLLERR;
+		mask |= EPOLLERR;
 	if (sk->sk_shutdown & RCV_SHUTDOWN)
-		mask |= POLLRDHUP;
+		mask |= EPOLLRDHUP;
 	if (sk->sk_shutdown == SHUTDOWN_MASK)
-		mask |= POLLHUP;
+		mask |= EPOLLHUP;
 
 	/* readable? */
 	if (!skb_queue_empty(&sk->sk_receive_queue) ||
 	    (sk->sk_shutdown & RCV_SHUTDOWN))
-		mask |= POLLIN | POLLRDNORM;
+		mask |= EPOLLIN | EPOLLRDNORM;
 
 	if (sk->sk_state == RPMSG_CLOSED)
-		mask |= POLLHUP;
+		mask |= EPOLLHUP;
 
 	/* XXX is writable ?
 	 * this depends on the destination processor.
@@ -308,22 +301,20 @@ static unsigned int rpmsg_sock_poll(struct file *file, struct socket *sock,
 	 * if to remote: we need enabled rpmsg buffer or user supplied bufs
 	 * for now, let's always be writable.
 	 */
-	mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
+	mask |= EPOLLOUT | EPOLLWRNORM | EPOLLWRBAND;
 
 	return mask;
 }
 
-/* return bound socket address information, either local or remote
- * note: len is just an output parameter, doesn't carry any input value
- */
+/* return bound socket address information, either local or remote */
 static int rpmsg_sock_getname(struct socket *sock, struct sockaddr *addr,
-			      int *len, int peer)
+			      int peer)
 {
 	struct sock *sk = sock->sk;
 	struct rpmsg_socket *rpsk;
 	struct rpmsg_device *rpdev;
 	struct sockaddr_rpmsg *sa;
-	int ret = 0;
+	int ret;
 
 	rpsk = container_of(sk, struct rpmsg_socket, sk);
 
@@ -336,7 +327,7 @@ static int rpmsg_sock_getname(struct socket *sock, struct sockaddr *addr,
 
 	addr->sa_family = AF_RPMSG;
 	sa = (struct sockaddr_rpmsg *)addr;
-	*len = sizeof(*sa);
+	ret = sizeof(*sa);
 
 	if (peer) {
 		sa->vproc_id = rpsk->rproc_id;

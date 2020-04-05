@@ -18,6 +18,16 @@
 			compatible = "arm,cortex-a15";
 			reg = <1>;
 			operating-points-v2 = <&cpu0_opp_table>;
+
+			clocks = <&dpll_mpu_ck>;
+			clock-names = "cpu";
+
+			clock-latency = <300000>; /* From omap-cpufreq driver */
+
+			/* cooling options */
+			#cooling-cells = <2>; /* min followed by max */
+
+			vbb-supply = <&abb_mpu>;
 		};
 	};
 
@@ -122,29 +132,22 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			status = "disabled";
-			vin3a: port@0 {
+			ports {
 				#address-cells = <1>;
 				#size-cells = <0>;
-				reg = <0>;
-				status = "disabled";
-			};
-			vin4a: port@1 {
-				#address-cells = <1>;
-				#size-cells = <0>;
-				reg = <1>;
-				status = "disabled";
-			};
-			vin3b: port@2 {
-				#address-cells = <1>;
-				#size-cells = <0>;
-				reg = <2>;
-				status = "disabled";
-			};
-			vin4b: port@3 {
-				#address-cells = <1>;
-				#size-cells = <0>;
-				reg = <3>;
-				status = "disabled";
+
+				vin3a: port@0 {
+					reg = <0>;
+				};
+				vin4a: port@1 {
+					reg = <1>;
+				};
+				vin3b: port@2 {
+					reg = <2>;
+				};
+				vin4b: port@3 {
+					reg = <3>;
+				};
 			};
 		};
 
@@ -174,17 +177,16 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			status = "disabled";
-			vin5a: port@0 {
+			ports {
 				#address-cells = <1>;
 				#size-cells = <0>;
-				reg = <0>;
-				status = "disabled";
-			};
-			vin6a: port@1 {
-				#address-cells = <1>;
-				#size-cells = <0>;
-				reg = <1>;
-				status = "disabled";
+
+				vin5a: port@0 {
+					reg = <0>;
+				};
+				vin6a: port@1 {
+					reg = <1>;
+				};
 			};
 		};
 	};
@@ -203,9 +205,9 @@
 	reg-names = "dss", "pll1_clkctrl", "pll1",
 		    "pll2_clkctrl", "pll2";
 
-	clocks = <&dss_dss_clk>,
-		 <&dss_video1_clk>,
-		 <&dss_video2_clk>;
+	clocks = <&dss_clkctrl DRA7_DSS_CORE_CLKCTRL 8>,
+		 <&dss_clkctrl DRA7_DSS_CORE_CLKCTRL 12>,
+		 <&dss_clkctrl DRA7_DSS_CORE_CLKCTRL 13>;
 	clock-names = "fck", "video1_clk", "video2_clk";
 };
 

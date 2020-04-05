@@ -355,7 +355,7 @@ static inline void cppi5_hdesc_update_flags(struct cppi5_host_desc_t *desc,
  * @psdata_size: PSDATA size
  */
 static inline void cppi5_hdesc_update_psdata_size(
-		struct cppi5_host_desc_t *desc, u32 psdata_size)
+				struct cppi5_host_desc_t *desc, u32 psdata_size)
 {
 	WARN_ON(!desc);
 	WARN_ON(psdata_size > CPPI5_INFO0_HDESC_PSDATA_MAX_SIZE);
@@ -522,7 +522,7 @@ static inline void cppi5_hdesc_link_hbdesc(struct cppi5_host_desc_t *desc,
 }
 
 static inline dma_addr_t cppi5_hdesc_get_next_hbdesc(
-		struct cppi5_host_desc_t *desc)
+				struct cppi5_host_desc_t *desc)
 {
 	WARN_ON(!desc);
 
@@ -958,10 +958,10 @@ static inline void cppi5_tr_init(cppi5_tr_flags_t *flags,
  * Configure the triggers for the TR
  */
 static inline void cppi5_tr_set_trigger(cppi5_tr_flags_t *flags,
-		enum cppi5_tr_trigger trigger0,
-		enum cppi5_tr_trigger_type trigger0_type,
-		enum cppi5_tr_trigger trigger1,
-		enum cppi5_tr_trigger_type trigger1_type)
+				enum cppi5_tr_trigger trigger0,
+				enum cppi5_tr_trigger_type trigger0_type,
+				enum cppi5_tr_trigger trigger1,
+				enum cppi5_tr_trigger_type trigger1_type)
 {
 	WARN_ON(!flags);
 

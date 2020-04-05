@@ -215,7 +215,9 @@ int vlan_dev_set_egress_priority(const struct net_device *dev,
 	return 0;
 }
 
-/* Flags are defined in the vlan_flags enum in include/linux/if_vlan.h file. */
+/* Flags are defined in the vlan_flags enum in
+ * include/uapi/linux/if_vlan.h file.
+ */
 int vlan_dev_change_flags(const struct net_device *dev, u32 flags, u32 mask)
 {
 	struct vlan_dev_priv *vlan = vlan_dev_priv(dev);
@@ -366,10 +368,12 @@ static int vlan_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	ifrr.ifr_ifru = ifr->ifr_ifru;
 
 	switch (cmd) {
+	case SIOCSHWTSTAMP:
+		if (!net_eq(dev_net(dev), &init_net))
+			break;
 	case SIOCGMIIPHY:
 	case SIOCGMIIREG:
 	case SIOCSMIIREG:
-	case SIOCSHWTSTAMP:
 	case SIOCGHWTSTAMP:
 		if (netif_device_present(real_dev) && ops->ndo_do_ioctl)
 			err = ops->ndo_do_ioctl(real_dev, &ifrr, cmd);
@@ -766,11 +770,23 @@ static int vlan_dev_get_iflink(const struct net_device *dev)
 	return real_dev->ifindex;
 }
 
+static int vlan_set_dump(struct net_device *dev,
+			 struct ethtool_dump *dump)
+{
+	struct net_device *real_dev = vlan_dev_priv(dev)->real_dev;
+
+	if (!real_dev->ethtool_ops->set_dump)
+		return -EOPNOTSUPP;
+
+	return real_dev->ethtool_ops->set_dump(real_dev, dump);
+}
+
 static const struct ethtool_ops vlan_ethtool_ops = {
 	.get_link_ksettings	= vlan_ethtool_get_link_ksettings,
 	.get_drvinfo	        = vlan_ethtool_get_drvinfo,
 	.get_link		= ethtool_op_get_link,
 	.get_ts_info		= vlan_ethtool_get_ts_info,
+	.set_dump               = vlan_set_dump,
 };
 
 static const struct net_device_ops vlan_netdev_ops = {

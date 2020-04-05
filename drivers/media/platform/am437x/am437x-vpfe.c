@@ -120,7 +120,7 @@ static int vpfe_calc_format_size(struct vpfe_device *vpfe,
 				 struct v4l2_format *f);
 
 static const struct vpfe_fmt *find_format_by_code(struct vpfe_device *vpfe,
-					    unsigned int code)
+						  unsigned int code)
 {
 	struct vpfe_fmt *fmt;
 	unsigned int k;
@@ -135,7 +135,7 @@ static const struct vpfe_fmt *find_format_by_code(struct vpfe_device *vpfe,
 }
 
 static const struct vpfe_fmt *find_format_by_pix(struct vpfe_device *vpfe,
-					   unsigned int pixelformat)
+						 unsigned int pixelformat)
 {
 	struct vpfe_fmt *fmt;
 	unsigned int k;
@@ -905,7 +905,7 @@ static int vpfe_config_ccdc_image_format(struct vpfe_device *vpfe)
 	vpfe_dbg(2, vpfe, "vpfe_config_ccdc_image_format\n");
 
 	vpfe_dbg(1, vpfe, "pixelformat: %4.4s\n",
-		(char *)&vpfe->v_fmt.fmt.pix.pixelformat);
+		 (char *)&vpfe->v_fmt.fmt.pix.pixelformat);
 
 	if (vpfe_ccdc_set_pixel_format(&vpfe->ccdc,
 			vpfe->v_fmt.fmt.pix.pixelformat) < 0) {
@@ -1432,14 +1432,14 @@ static int vpfe_try_fmt(struct file *file, void *priv,
 		if (ret)
 			break;
 
-		if ((f->fmt.pix.width == fse.max_width) &&
-		    (f->fmt.pix.height == fse.max_height)) {
+		if (f->fmt.pix.width == fse.max_width &&
+		    f->fmt.pix.height == fse.max_height) {
 			found = true;
 			break;
-		} else if ((f->fmt.pix.width >= fse.min_width) &&
-			 (f->fmt.pix.width <= fse.max_width) &&
-			 (f->fmt.pix.height >= fse.min_height) &&
-			 (f->fmt.pix.height <= fse.max_height)) {
+		} else if (f->fmt.pix.width >= fse.min_width &&
+			   f->fmt.pix.width <= fse.max_width &&
+			   f->fmt.pix.height >= fse.min_height &&
+			   f->fmt.pix.height <= fse.max_height) {
 			found = true;
 			break;
 		}
@@ -1488,8 +1488,8 @@ static int vpfe_s_fmt(struct file *file, void *priv,
 	/* Just double check nothing has gone wrong */
 	if (mbus_fmt.code != fmt->code) {
 		vpfe_dbg(3, vpfe,
-			"%s subdev changed format on us, this should not happen\n",
-			__func__);
+			 "%s subdev changed format on us, this should not happen\n",
+			 __func__);
 		return -EINVAL;
 	}
 
@@ -1523,7 +1523,7 @@ static int vpfe_enum_size(struct file *file, void  *priv,
 	fmt = find_format_by_pix(vpfe, fsize->pixel_format);
 	if (!fmt) {
 		vpfe_dbg(3, vpfe, "Invalid pixel code: %x\n",
-			fsize->pixel_format);
+			 fsize->pixel_format);
 		return -EINVAL;
 	}
 
@@ -1547,8 +1547,8 @@ static int vpfe_enum_size(struct file *file, void  *priv,
 	fsize->discrete.height = fse.max_height;
 
 	vpfe_dbg(1, vpfe, "vpfe_enum_size: index: %d pixformat: %4.4s size: %dx%d\n",
-		fsize->index, (char *)&fsize->pixel_format,
-		fsize->discrete.width, fsize->discrete.height);
+		 fsize->index, (char *)&fsize->pixel_format,
+		 fsize->discrete.width, fsize->discrete.height);
 
 	return 0;
 }
@@ -1882,7 +1882,7 @@ static void vpfe_return_all_buffers(struct vpfe_device *vpfe,
 	if (vpfe->cur_frm)
 		vb2_buffer_done(&vpfe->cur_frm->vb.vb2_buf, state);
 
-	if (vpfe->next_frm && (vpfe->next_frm != vpfe->cur_frm))
+	if (vpfe->next_frm && vpfe->next_frm != vpfe->cur_frm)
 		vb2_buffer_done(&vpfe->next_frm->vb.vb2_buf, state);
 
 	vpfe->cur_frm = NULL;
@@ -2210,8 +2210,8 @@ vpfe_async_bound(struct v4l2_async_notifier *notifier,
 	vpfe_dbg(1, vpfe, "vpfe_async_bound\n");
 
 	for (i = 0; i < ARRAY_SIZE(vpfe->cfg->asd); i++) {
-		if (vpfe->cfg->asd[i]->match.fwnode.fwnode ==
-		    asd[i].match.fwnode.fwnode) {
+		if (vpfe->cfg->asd[i]->match.fwnode ==
+		    asd[i].match.fwnode) {
 			sdinfo = &vpfe->cfg->sub_devs[i];
 			vpfe->sd[i] = subdev;
 			vpfe->sd[i]->grp_id = sdinfo->grp_id;
@@ -2333,6 +2333,11 @@ static int vpfe_async_complete(struct v4l2_async_notifier *notifier)
 	return vpfe_probe_complete(vpfe);
 }
 
+static const struct v4l2_async_notifier_operations vpfe_async_ops = {
+	.bound = vpfe_async_bound,
+	.complete = vpfe_async_complete,
+};
+
 static struct vpfe_config *
 vpfe_get_pdata(struct platform_device *pdev)
 {
@@ -2421,7 +2426,7 @@ vpfe_get_pdata(struct platform_device *pdev)
 		}
 
 		pdata->asd[i]->match_type = V4L2_ASYNC_MATCH_FWNODE;
-		pdata->asd[i]->match.fwnode.fwnode = of_fwnode_handle(rem);
+		pdata->asd[i]->match.fwnode = of_fwnode_handle(rem);
 		of_node_put(rem);
 	}
 
@@ -2497,8 +2502,10 @@ static int vpfe_probe(struct platform_device *pdev)
 
 	pm_runtime_put_sync(&pdev->dev);
 
-	vpfe->sd = devm_kzalloc(&pdev->dev, sizeof(struct v4l2_subdev *) *
-				ARRAY_SIZE(vpfe->cfg->asd), GFP_KERNEL);
+	vpfe->sd = devm_kcalloc(&pdev->dev,
+				ARRAY_SIZE(vpfe->cfg->asd),
+				sizeof(struct v4l2_subdev *),
+				GFP_KERNEL);
 	if (!vpfe->sd) {
 		ret = -ENOMEM;
 		goto probe_out_v4l2_unregister;
@@ -2506,8 +2513,7 @@ static int vpfe_probe(struct platform_device *pdev)
 
 	vpfe->notifier.subdevs = vpfe->cfg->asd;
 	vpfe->notifier.num_subdevs = ARRAY_SIZE(vpfe->cfg->asd);
-	vpfe->notifier.bound = vpfe_async_bound;
-	vpfe->notifier.complete = vpfe_async_complete;
+	vpfe->notifier.ops = &vpfe_async_ops;
 	ret = v4l2_async_notifier_register(&vpfe->v4l2_dev,
 						&vpfe->notifier);
 	if (ret) {
@@ -2574,8 +2580,7 @@ static void vpfe_save_context(struct vpfe_ccdc *ccdc)
 
 static int vpfe_suspend(struct device *dev)
 {
-	struct platform_device *pdev = to_platform_device(dev);
-	struct vpfe_device *vpfe = platform_get_drvdata(pdev);
+	struct vpfe_device *vpfe = dev_get_drvdata(dev);
 	struct vpfe_ccdc *ccdc = &vpfe->ccdc;
 
 	/* only do full suspend if streaming has started */
@@ -2632,8 +2637,7 @@ static void vpfe_restore_context(struct vpfe_ccdc *ccdc)
 
 static int vpfe_resume(struct device *dev)
 {
-	struct platform_device *pdev = to_platform_device(dev);
-	struct vpfe_device *vpfe = platform_get_drvdata(pdev);
+	struct vpfe_device *vpfe = dev_get_drvdata(dev);
 	struct vpfe_ccdc *ccdc = &vpfe->ccdc;
 
 	/* only do full resume if streaming has started */

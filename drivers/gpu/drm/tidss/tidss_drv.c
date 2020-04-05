@@ -13,7 +13,6 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
-#include <drm/drm_fb_cma_helper.h>
 #include <drm/drm_fb_helper.h>
 #include <drm/drm_gem_cma_helper.h>
 
@@ -26,40 +25,11 @@
  * Device Information
  */
 
-#ifdef CONFIG_DRM_TIDSS_DSS6
-static const struct tidss_features tidss_k2g_feats = {
-	.dispc_init = dispc6_init,
-};
-#endif
-
-#ifdef CONFIG_DRM_TIDSS_DSS7
-static const struct tidss_features tidss_am6_feats = {
-	.dispc_init = dispc7_init,
-};
-#endif
-static const struct of_device_id tidss_of_table[] = {
-#ifdef CONFIG_DRM_TIDSS_DSS6
-	{ .compatible = "ti,k2g-dss", .data = &tidss_k2g_feats },
-#endif
-#ifdef CONFIG_DRM_TIDSS_DSS7
-	{ .compatible = "ti,am6-dss", .data = &tidss_am6_feats },
-#endif
-	{ }
-};
-
-static void tidss_lastclose(struct drm_device *dev)
-{
-	struct tidss_device *tidss = dev->dev_private;
-
-	drm_fbdev_cma_restore_mode(tidss->fbdev);
-}
-
 DEFINE_DRM_GEM_CMA_FOPS(tidss_fops);
 
 static struct drm_driver tidss_driver = {
 	.driver_features	= DRIVER_GEM | DRIVER_MODESET | DRIVER_PRIME
 				| DRIVER_ATOMIC | DRIVER_HAVE_IRQ,
-	.lastclose		= tidss_lastclose,
 	.gem_free_object_unlocked = drm_gem_cma_free_object,
 	.gem_vm_ops		= &drm_gem_cma_vm_ops,
 	.prime_handle_to_fd	= drm_gem_prime_handle_to_fd,
@@ -119,46 +89,19 @@ static int tidss_pm_runtime_resume(struct device *dev)
 static int tidss_suspend(struct device *dev)
 {
 	struct tidss_device *tidss = dev_get_drvdata(dev);
-	struct drm_atomic_state *state;
 
-	drm_kms_helper_poll_disable(tidss->ddev);
+	dev_dbg(dev, "%s\n", __func__);
 
-	console_lock();
-	drm_fbdev_cma_set_suspend(tidss->fbdev, 1);
-	console_unlock();
-
-	state = drm_atomic_helper_suspend(tidss->ddev);
-
-	if (IS_ERR(state)) {
-		console_lock();
-		drm_fbdev_cma_set_suspend(tidss->fbdev, 0);
-		console_unlock();
-
-		drm_kms_helper_poll_enable(tidss->ddev);
-
-		return PTR_ERR(state);
-	}
-
-	tidss->saved_state = state;
-
-	return 0;
+	return drm_mode_config_helper_suspend(tidss->ddev);
 }
 
 static int tidss_resume(struct device *dev)
 {
 	struct tidss_device *tidss = dev_get_drvdata(dev);
-	int ret = 0;
 
-	if (tidss->saved_state)
-		ret = drm_atomic_helper_resume(tidss->ddev, tidss->saved_state);
+	dev_dbg(dev, "%s\n", __func__);
 
-	console_lock();
-	drm_fbdev_cma_set_suspend(tidss->fbdev, 0);
-	console_unlock();
-
-	drm_kms_helper_poll_enable(tidss->ddev);
-
-	return ret;
+	return drm_mode_config_helper_resume(tidss->ddev);
 }
 #endif /* CONFIG_PM_SLEEP */
 
@@ -174,6 +117,64 @@ static const struct dev_pm_ops tidss_pm_ops = {
  * Platform driver
  */
 
+static int tidss_init_remote_device(struct tidss_device *tidss)
+{
+	int ret;
+	struct device *dev = tidss->dev;
+	struct device_node *dss_remote_dev_node;
+	const char *name;
+
+	dss_remote_dev_node = of_get_child_by_name(dev->of_node, "dss-remote");
+	if (!dss_remote_dev_node)
+		return 0;
+
+	if (!of_find_property(dss_remote_dev_node, "remote-name", NULL)) {
+		ret = 0;
+		goto out;
+	}
+
+	ret = of_property_read_string(dss_remote_dev_node, "remote-name", &name);
+	if (ret) {
+		dev_err(dev, "%s: could not read remote-name property\n", __func__);
+		goto out;
+	}
+
+	tidss->rdev = rpmsg_remotedev_get_named_device(name);
+	if (!tidss->rdev) {
+		ret = -EPROBE_DEFER;
+		goto out;
+	} else if (IS_ERR(tidss->rdev)) {
+		ret = PTR_ERR(tidss->rdev);
+		goto out;
+	}
+
+	tidss->rdev->cb_data = tidss;
+
+	if (tidss->rdev->device.display.ops->ready == NULL ||
+			tidss->rdev->device.display.ops->get_res_info == NULL ||
+			tidss->rdev->device.display.ops->commit == NULL) {
+		dev_err(dev, "%s: rpmsg remotedev ops not complete\n", __func__);
+		ret = -EINVAL;
+		goto disconnect;
+	}
+
+	/* Cant really do much if the remotedev is not ready yet */
+	if (!tidss->rdev->device.display.ops->ready(tidss->rdev)) {
+		ret = -EPROBE_DEFER;
+		goto disconnect;
+	}
+
+	goto out;
+
+disconnect:
+	rpmsg_remotedev_put_device(tidss->rdev);
+	tidss->rdev->cb_data = NULL;
+	tidss->rdev = NULL;
+out:
+	of_node_put(dss_remote_dev_node);
+	return ret;
+}
+
 static int tidss_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -188,29 +189,34 @@ static int tidss_probe(struct platform_device *pdev)
 	if (tidss == NULL)
 		return -ENOMEM;
 
-	tidss->pdev = pdev;
 	tidss->dev = dev;
-	tidss->feat = of_device_get_match_data(dev);
+	tidss->features = of_device_get_match_data(dev);
+
+	ret = tidss_init_remote_device(tidss);
+	if (ret)
+		return ret;
 
 	platform_set_drvdata(pdev, tidss);
 
 	ddev = drm_dev_alloc(&tidss_driver, dev);
-	if (IS_ERR(ddev))
-		return PTR_ERR(ddev);
+	if (IS_ERR(ddev)) {
+		ret = PTR_ERR(ddev);
+		goto err_fini_rdev;
+	}
 
 	tidss->ddev = ddev;
 	ddev->dev_private = tidss;
 
 	pm_runtime_enable(dev);
 
-	ret = tidss->feat->dispc_init(tidss);
+	ret = tidss->features->dispc_init(tidss);
 	if (ret) {
 		dev_err(dev, "failed to initialize dispc: %d\n", ret);
 		goto err_disable_pm;
 	}
 
-#ifndef CONFIG_PM_SLEEP
-	/* no PM, so force enable DISPC */
+#ifndef CONFIG_PM
+	/* If we don't have PM, we need to call resume manually */
 	tidss->dispc_ops->runtime_resume(tidss->dispc);
 #endif
 
@@ -221,10 +227,10 @@ static int tidss_probe(struct platform_device *pdev)
 		goto err_runtime_suspend;
 	}
 
-	irq = platform_get_irq(tidss->pdev, 0);
+	irq = tidss->dispc_ops->get_irq(tidss->dispc);
 	if (irq < 0) {
 		ret = irq;
-		dev_err(dev, "platform_get_irq failed: %d\n", ret);
+		dev_err(dev, "failed to get dispc irq: %d\n", ret);
 		goto err_modeset_cleanup;
 	}
 
@@ -234,22 +240,6 @@ static int tidss_probe(struct platform_device *pdev)
 		goto err_modeset_cleanup;
 	}
 
-#ifdef CONFIG_DRM_FBDEV_EMULATION
-	if (ddev->mode_config.num_connector) {
-		struct drm_fbdev_cma *fbdev;
-
-		fbdev = drm_fbdev_cma_init(ddev, 32,
-					   ddev->mode_config.num_connector);
-		if (IS_ERR(fbdev)) {
-			dev_err(tidss->dev, "fbdev init failed\n");
-			ret =  PTR_ERR(fbdev);
-			goto err_irq_uninstall;
-		}
-
-		tidss->fbdev = fbdev;
-	}
-#endif
-
 	drm_kms_helper_poll_init(ddev);
 
 	ret = drm_dev_register(ddev, 0);
@@ -258,6 +248,8 @@ static int tidss_probe(struct platform_device *pdev)
 		goto err_poll_fini;
 	}
 
+	drm_fbdev_generic_setup(ddev, 32);
+
 	dev_dbg(dev, "%s done\n", __func__);
 
 	return 0;
@@ -265,22 +257,16 @@ static int tidss_probe(struct platform_device *pdev)
 err_poll_fini:
 	drm_kms_helper_poll_fini(ddev);
 
-	if (tidss->fbdev)
-		drm_fbdev_cma_fini(tidss->fbdev);
-
 	drm_atomic_helper_shutdown(ddev);
 
-#ifdef CONFIG_DRM_FBDEV_EMULATION
-err_irq_uninstall:
-#endif
 	drm_irq_uninstall(ddev);
 
 err_modeset_cleanup:
 	drm_mode_config_cleanup(ddev);
 
 err_runtime_suspend:
-#ifndef CONFIG_PM_SLEEP
-	/* no PM, so force disable DISPC */
+#ifndef CONFIG_PM
+	/* If we don't have PM, we need to call suspend manually */
 	tidss->dispc_ops->runtime_suspend(tidss->dispc);
 #endif
 
@@ -289,7 +275,11 @@ err_runtime_suspend:
 err_disable_pm:
 	pm_runtime_disable(dev);
 
-	drm_dev_unref(ddev);
+err_fini_rdev:
+	if (tidss->rdev)
+		rpmsg_remotedev_put_device(tidss->rdev);
+
+	drm_dev_put(ddev);
 
 	return ret;
 }
@@ -306,17 +296,14 @@ static int tidss_remove(struct platform_device *pdev)
 
 	drm_kms_helper_poll_fini(ddev);
 
-	if (tidss->fbdev)
-		drm_fbdev_cma_fini(tidss->fbdev);
-
 	drm_atomic_helper_shutdown(ddev);
 
 	drm_irq_uninstall(ddev);
 
 	drm_mode_config_cleanup(ddev);
 
-#ifndef CONFIG_PM_SLEEP
-	/* no PM, so force disable DISPC */
+#ifndef CONFIG_PM
+	/* If we don't have PM, we need to call suspend manually */
 	tidss->dispc_ops->runtime_suspend(tidss->dispc);
 #endif
 
@@ -324,12 +311,38 @@ static int tidss_remove(struct platform_device *pdev)
 
 	pm_runtime_disable(dev);
 
-	drm_dev_unref(ddev);
+	drm_dev_put(ddev);
 
 	dev_dbg(dev, "%s done\n", __func__);
 
 	return 0;
 }
+
+#ifdef CONFIG_DRM_TIDSS_DSS6
+static const struct tidss_features tidss_k2g_features = {
+	.dispc_init = dispc6_init,
+};
+#endif
+
+#ifdef CONFIG_DRM_TIDSS_DSS7
+static const struct tidss_features tidss_am6_features = {
+	.dispc_init = dispc7_init,
+};
+
+static const struct tidss_features tidss_j721e_features = {
+	.dispc_init = dispc7_init,
+};
+#endif
+static const struct of_device_id tidss_of_table[] = {
+#ifdef CONFIG_DRM_TIDSS_DSS6
+	{ .compatible = "ti,k2g-dss", .data = &tidss_k2g_features },
+#endif
+#ifdef CONFIG_DRM_TIDSS_DSS7
+	{ .compatible = "ti,am6-dss", .data = &tidss_am6_features },
+	{ .compatible = "ti,j721e-dss", .data = &tidss_j721e_features },
+#endif
+	{ }
+};
 
 MODULE_DEVICE_TABLE(of, tidss_of_table);
 

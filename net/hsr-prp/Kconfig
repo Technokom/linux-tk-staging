@@ -1,12 +1,12 @@
 #
 # IEC 62439-3 High-availability Seamless Redundancy (HSR) /
-# IEC 62439-4 Parallel Redundancy Protocol (PRP) support
+# IEC 62439-4 Parallel Redundancy Protocol (PRP)
 #
 config HSR_PRP
 	tristate "IEC 62439 HSR/PRP Support"
 	---help---
 	  This enables IEC 62439 defined High-availability Seamless
-	  Redundancy (HSR) and Parallel Redundancy Protocol (PRP) support.
+	  Redundancy (HSR) and Parallel Redundancy Protocol (PRP).
 	  If you say Y here, then your Linux box will be able to act as a
 	  DANH ("Doubly attached node implementing HSR") or DANP ("Doubly
 	  attached node implementing PRP"). For this to work, your Linux

@@ -1,17 +1,9 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Low level suspend code for AM33XX SoCs
  *
- * Copyright (C) 2012-2017 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2012-2018 Texas Instruments Incorporated - http://www.ti.com/
  *	Dave Gerlach, Vaibhav Bedia
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation version 2.
- *
- * This program is distributed "as is" WITHOUT ANY WARRANTY of any
- * kind, whether express or implied; without even the implied warranty
- * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <generated/ti-pm-asm-offsets.h>
@@ -29,7 +21,7 @@
 #define AM33XX_CM_CLKCTRL_MODULEMODE_ENABLE			0x0002
 
 /* replicated define because linux/bitops.h cannot be included in assembly */
-#define BIT(nr)				(1 << (nr))
+#define BIT(nr)			(1 << (nr))
 
 	.arm
 	.align 3
@@ -252,13 +244,14 @@ am33xx_emif_sram_table:
 	.space EMIF_PM_FUNCTIONS_SIZE
 
 ENTRY(am33xx_pm_sram)
-.word am33xx_do_wfi
-.word am33xx_do_wfi_sz
-.word am33xx_resume_offset
-.word am33xx_emif_sram_table
-.word am33xx_pm_ro_sram_data
+	.word am33xx_do_wfi
+	.word am33xx_do_wfi_sz
+	.word am33xx_resume_offset
+	.word am33xx_emif_sram_table
+	.word am33xx_pm_ro_sram_data
+
 resume_addr:
-.word	cpu_resume - PAGE_OFFSET + 0x80000000
+.word  cpu_resume - PAGE_OFFSET + 0x80000000
 
 .align 3
 ENTRY(am33xx_pm_ro_sram_data)

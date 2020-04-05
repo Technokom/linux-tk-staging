@@ -97,9 +97,10 @@ struct mt9t11x_camera_info {
 /*
  * Logical address
  */
-#define _VAR(id, offset, base)	(base | (id & 0x1f) << 10 | (offset & 0x3ff))
-#define VAR(id, offset)  _VAR(id, offset, 0x0000)
-#define VAR8(id, offset) _VAR(id, offset, 0x8000)
+#define _VAR(id, offset, base) ((base) | ((id) & 0x1f) << 10 | \
+				((offset) & 0x3ff))
+#define VAR(id, offset)  _VAR((id), (offset), 0x0000)
+#define VAR8(id, offset) _VAR((id), (offset), 0x8000)
 
 /************************************************************************
  *			struct
@@ -434,7 +435,6 @@ static int mt9t11x_streaming(struct mt9t11x_priv *priv, int on)
 	return 0;
 }
 
-
 #define CLOCK_INFO(a, b)				\
 	do {						\
 		if (debug > 1)				\
@@ -614,7 +614,7 @@ static int mt9t11x_set_resolution_params(const struct i2c_client *client)
 	struct mt9t11x_priv *priv = to_mt9t11x(client);
 	struct mt9t11x_resolution_param *resolution = &priv->resolution;
 
-	if ((priv->frame.width == 1280) && (priv->frame.height == 720)) {
+	if (priv->frame.width == 1280 && priv->frame.height == 720) {
 		resolution->col_strt    = 0x0004;
 		resolution->row_end     = 0x05AD;
 		resolution->col_end     = 0x050B;
@@ -639,9 +639,9 @@ static int mt9t11x_set_resolution_params(const struct i2c_client *client)
 		resolution->max_fd_50   = 0x0004;
 		resolution->max_fd_60   = 0x0004;
 		resolution->targ_fd     = 0x0004;
-	} else if ((priv->frame.width <= 1024) &&
-		   (priv->frame.height <= 768) &&
-		   (priv->frame.width != priv->frame.height)) {
+	} else if (priv->frame.width <= 1024 &&
+		   priv->frame.height <= 768 &&
+		   priv->frame.width != priv->frame.height) {
 		resolution->col_strt    = 0x000;
 		resolution->row_end     = 0x60D;
 		resolution->col_end     = 0x80D;
@@ -665,11 +665,11 @@ static int mt9t11x_set_resolution_params(const struct i2c_client *client)
 		resolution->max_fd_50   = 0x0003;
 		resolution->max_fd_60   = 0x0004;
 		resolution->targ_fd     = 0x0003;
-		if ((priv->frame.width == 1024) &&
-		    (priv->frame.height == 768)) {
+		if (priv->frame.width == 1024 &&
+		    priv->frame.height == 768) {
 			resolution->tx_water = 0x0218;
-		} else if ((priv->frame.width == 800) &&
-			   (priv->frame.height == 480)) {
+		} else if (priv->frame.width == 800 &&
+			   priv->frame.height == 480) {
 			resolution->tx_water = 0x02DA;
 		} else {
 			/*
@@ -784,7 +784,7 @@ inline u32 calc_vco(u32 desired, u32 ext, u8 *_m, u8 *_n)
 			delta = (desired - actual);
 			if (delta < 0)
 				continue;
-			if ((delta < bestdelta) || (bestdelta == -1)) {
+			if (delta < bestdelta || bestdelta == -1) {
 				bestdelta = delta;
 				*_m = (u8)(m);
 				*_n = (u8)(n - 1);
@@ -810,7 +810,7 @@ static inline u32 calc_pixclk(u32 desired, u32 vco, u8 *_p1, u8 *_p2)
 			delta = (desired - actual);
 			if (delta < 0)
 				continue;
-			if ((delta < bestdelta) || (bestdelta == -1)) {
+			if (delta < bestdelta || bestdelta == -1) {
 				bestdelta = delta;
 				*_p1 = (u8)(p1 - 1);
 				*_p2 = (u8)(p2 - 1);
@@ -861,13 +861,15 @@ static unsigned int mt9t11x_pll_calc_params(struct mt9t11x_priv *priv)
 
 static int mt9t11x_sysctl_startup(const struct i2c_client *client)
 {
-	int ret = 0;
+	int ret;
 
 	/* reset */
-	mt9t11x_reset(client);
+	ret = mt9t11x_reset(client);
+	if (ret < 0)
+		return ret;
 
 	/* Setup PLL */
-	mt9t11x_pll_setup_pll(client);
+	ret = mt9t11x_pll_setup_pll(client);
 
 	return ret;
 }
@@ -2275,7 +2277,6 @@ MODULE_DEVICE_TABLE(of, mt9t11x_of_match);
 
 static struct i2c_driver mt9t11x_i2c_driver = {
 	.driver = {
-		.owner = THIS_MODULE,
 		.name	= DRIVER_NAME,
 		.of_match_table = of_match_ptr(mt9t11x_of_match),
 	},

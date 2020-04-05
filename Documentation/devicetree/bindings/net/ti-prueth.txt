@@ -12,6 +12,8 @@ Required properties:
 - firmware-name	   : list of strings containing firmware path.
 - sram	           : pHandle to OCMC SRAM node
 - interrupt-parent : pHandle to the PRUSS INTC node
+- mii-rt	   : pHandle to MII_RT module's syscon regmap
+- iep		   : pHandle to IEP module's syscon regmap
 - rx-queue-size    : Array of queue sizes in rx direction (Ingress)
                      Format /bits/ 16 <q1 q2 q3 q4>
                      Note that the queue size value (q1/q2/q3/q4)
@@ -21,10 +23,21 @@ Required properties:
     dts, the following defaults for that port will
     be used.
 
-    EMAC/HSR/PRP Defaults:
-    host: rx-queue-size = /bits/ 16 <194 194 194 194>
-    mii0: tx-queue-size = /bits/ 16 <97 97 97 97>
-    mii1: tx-queue-size = /bits/ 16 <97 97 97 97>
+    host: rx-queue-size = /bits/ 16 <194 194 194 194 0>
+    mii0: tx-queue-size = /bits/ 16 <97 97 97 97 48>
+    mii1: tx-queue-size = /bits/ 16 <97 97 97 97 48>
+
+Optional properties:
+- interrupt-names  : If enabling packet priority based interrupts for HSR/PRP,
+		     should be "rx_red_hp", "rx_red_lp".
+- interrupts       : should contain an array of PRUSS system event
+                     numbers.
+- pinctrl-names	: List of assigned state names,
+				  see pinctrl binding documentation.
+- pinctrl-0: phandle, referring to the SYNC0 signal on configuration node.
+- pinctrl-1: phandle, referring to the SYNC0 signal off configuration node.
+- pinctrl-2: phandle, referring to the LATCH0 signal on configuration node.
+- pinctrl-3: phandle, referring to the LATCH0 signal off configuration node.
 
 Must contain children, one for each of the MAC ports.
 Children must be named ethernet-mii0 and ethernet-mii1.
@@ -42,7 +55,8 @@ Required properties for children:
                      emac_ptp_tx and hsrprp_ptp_tx are optional.
 - interrupts       : should contain an array of PRUSS system event
                      numbers used as the interrupt sources for Rx
-                     Tx and PTP Tx event packet timestamping respectively.
+                     Tx and PTP Tx event packet timestamping (with
+                     PRP firmware) respectively.
 - tx-queue-size    : Array of queue sizes in tx direction (Egress)
                      Format /bits/ 16 <q1 q2 q3 q4>.
                      Note that the queue size value (q1/q2/q3/q4) has
@@ -59,13 +73,15 @@ Optional properties for children:
 
 Example (am572x-idk board, dual-emac):
 ======================================
-	pruss2_eth {
+	pruss2_eth: pruss2_eth {
 		compatible = "ti,am57-prueth";
 		prus = <&pru2_0>, <&pru2_1>;
 		firmware-name = "ti-pruss/am57xx-pru0-prueth-fw.elf",
 				"ti-pruss/am57xx-pru1-prueth-fw.elf";
 		sram = <&ocmcram1>;
 		interrupt-parent = <&pruss2_intc>;
+		mii-rt = <&pruss2_mii_rt>;
+		iep = <&pruss2_iep>;
 
 		pruss2_emac0: ethernet-mii0 {
 			phy-handle = <&pruss2_eth0_phy>;
@@ -90,13 +106,15 @@ Example (am572x-idk board, dual-emac):
 
 Example (am572x-idk board, single-emac):
 =======================================
-	pruss2_eth {
+	pruss2_eth: pruss2_eth {
 		compatible = "ti,am57-prueth";
 		prus = <&pru2_0>, <&pru2_1>;
 		firmware-name = "",
 				"ti-pruss/am57xx-pru1-prueth-fw.elf";
 		sram = <&ocmcram1>;
 		interrupt-parent = <&pruss2_intc>;
+		mii-rt = <&pruss2_mii_rt>;
+		iep = <&pruss2_iep>;
 
 		pruss2_emac1: ethernet-mii1 {
 			phy-handle = <&pruss2_eth1_phy>;
@@ -108,3 +126,14 @@ Example (am572x-idk board, single-emac):
 			local-mac-address = [00 00 00 00 00 00];
 		};
 	};
+
+
+Example (am572x-idk board, SYNC/LATCH configurations):
+======================================================
+&pruss2_eth {
+	pinctrl-names = "sync0_off", "sync0_on", "latch0_off", "latch0_on";
+	pinctrl-0 = <&pr2_edc_sync0_off>;
+	pinctrl-1 = <&pr2_edc_sync0_on>;
+	pinctrl-2 = <&pr2_edc_latch0_off>;
+	pinctrl-3 = <&pr2_edc_latch0_on>;
+};

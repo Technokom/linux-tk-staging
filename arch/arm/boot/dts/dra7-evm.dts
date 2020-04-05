@@ -17,7 +17,6 @@
 
 	aliases {
 		display0 = &hdmi0;
-
 		sound0 = &sound0;
 		sound1 = &hdmi;
 	};
@@ -25,6 +24,24 @@
 	memory@0 {
 		device_type = "memory";
 		reg = <0x0 0x80000000 0x0 0x60000000>; /* 1536 MB */
+	};
+
+	evm_12v0: fixedregulator-evm_12v0 {
+		/* main supply */
+		compatible = "regulator-fixed";
+		regulator-name = "evm_12v0";
+		regulator-min-microvolt = <12000000>;
+		regulator-max-microvolt = <12000000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	evm_1v8_sw: fixedregulator-evm_1v8 {
+		compatible = "regulator-fixed";
+		regulator-name = "evm_1v8";
+		vin-supply = <&smps9_reg>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
 	};
 
 	reserved-memory {
@@ -59,24 +76,6 @@
 			reusable;
 			status = "okay";
 		};
-	};
-
-	evm_12v0: fixedregulator-evm_12v0 {
-		/* main supply */
-		compatible = "regulator-fixed";
-		regulator-name = "evm_12v0";
-		regulator-min-microvolt = <12000000>;
-		regulator-max-microvolt = <12000000>;
-		regulator-always-on;
-		regulator-boot-on;
-	};
-
-	evm_1v8_sw: fixedregulator-evm_1v8 {
-		compatible = "regulator-fixed";
-		regulator-name = "evm_1v8";
-		vin-supply = <&smps9_reg>;
-		regulator-min-microvolt = <1800000>;
-		regulator-max-microvolt = <1800000>;
 	};
 
 	evm_3v3_sd: fixedregulator-sd {
@@ -176,15 +175,15 @@
 		compatible = "ti,dra7evm-tpd12s015";
 
 		pinctrl-names = "i2c", "ddc";
-		pinctrl-0 = <&hdmi_i2c_sel_pin &hdmi_i2c_pins_i2c>;
-		pinctrl-1 = <&hdmi_i2c_sel_pin &hdmi_i2c_pins_ddc>;
+		pinctrl-0 = <&hdmi_i2c_pins_i2c>;
+		pinctrl-1 = <&hdmi_i2c_pins_ddc>;
 
 		ddc-i2c-bus = <&i2c2>;
-		i2c2-hdmi-switch-mcasp = <&mcasp8>;
 
 		gpios = <&pcf_hdmi 4 0>,	/* P4, CT CP HPD */
 			<&pcf_hdmi 5 0>,	/* P5, LS OE */
-			<&gpio7 12 0>;	/* gpio7_12/sp1_cs2, HPD */
+			<&gpio7 12 0>,	/* gpio7_12/sp1_cs2, HPD */
+			<&mcasp8 2 0>;	/* i2c2/ddc switch */
 
 		ports {
 			#address-cells = <1>;
@@ -210,7 +209,21 @@
 };
 
 &dra7_pmx_core {
-	hdmi_i2c_sel_pin: pinmux_hdmi_i2c_sel_pin {
+	dcan1_pins_default: dcan1_pins_default {
+		pinctrl-single,pins = <
+			DRA7XX_CORE_IOPAD(0x37d0, PIN_OUTPUT_PULLUP | MUX_MODE0) /* dcan1_tx */
+			DRA7XX_CORE_IOPAD(0x3818, PULL_UP | MUX_MODE1) /* wakeup0.dcan1_rx */
+		>;
+	};
+
+	dcan1_pins_sleep: dcan1_pins_sleep {
+		pinctrl-single,pins = <
+			DRA7XX_CORE_IOPAD(0x37d0, MUX_MODE15 | PULL_UP)	/* dcan1_tx.off */
+			DRA7XX_CORE_IOPAD(0x3818, MUX_MODE15 | PULL_UP)	/* wakeup0.off */
+		>;
+	};
+
+	mcasp8_axr2_pin: pinmux_mcasp8_axr2_pin {
 		pinctrl-single,pins = <
 			/* this pin is used as a GPIO via mcasp */
 			DRA7XX_CORE_IOPAD(0x36fc, PIN_OUTPUT | MUX_MODE1) /* mcasp2_aclkr.mcasp8_axr2 */
@@ -228,20 +241,6 @@
 		pinctrl-single,pins = <
 			DRA7XX_CORE_IOPAD(0x3808, PIN_INPUT | MUX_MODE1) /* i2c2_sda.hdmi1_ddc_scl */
 			DRA7XX_CORE_IOPAD(0x380c, PIN_INPUT | MUX_MODE1) /* i2c2_scl.hdmi1_ddc_sda */
-		>;
-	};
-
-	dcan1_pins_default: dcan1_pins_default {
-		pinctrl-single,pins = <
-			DRA7XX_CORE_IOPAD(0x37d0, PIN_OUTPUT_PULLUP | MUX_MODE0) /* dcan1_tx */
-			DRA7XX_CORE_IOPAD(0x3818, PULL_UP | MUX_MODE1) /* wakeup0.dcan1_rx */
-		>;
-	};
-
-	dcan1_pins_sleep: dcan1_pins_sleep {
-		pinctrl-single,pins = <
-			DRA7XX_CORE_IOPAD(0x37d0, MUX_MODE15 | PULL_UP)	/* dcan1_tx.off */
-			DRA7XX_CORE_IOPAD(0x3818, MUX_MODE15 | PULL_UP)	/* wakeup0.off */
 		>;
 	};
 };
@@ -464,7 +463,7 @@
 		mux-gpios = <&pcf_hdmi 3 GPIO_ACTIVE_LOW>; /* CAM_FPD_MUX_S0 */
 		port {
 			onboardLI: endpoint {
-				remote-endpoint = <&vin1a>;
+				remote-endpoint = <&vin1a_ep>;
 				hsync-active = <1>;
 				vsync-active = <1>;
 				pclk-sample = <0>;
@@ -659,14 +658,17 @@
 	pinctrl-2 = <&dcan1_pins_default>;
 };
 
+&vin1a {
+	vin1a_ep: endpoint@0 {
+		slave-mode;
+		remote-endpoint = <&onboardLI>;
+	};
+};
+
 &dss {
 	status = "ok";
 
 	vdda_video-supply = <&ldoln_reg>;
-};
-
-&bb2d {
-	status = "okay";
 };
 
 &hdmi {
@@ -681,16 +683,14 @@
 };
 
 &mcasp8 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&mcasp8_axr2_pin>;
+
+	gpio-controller;
+	#gpio-cells = <2>;
+
 	/* Not used for audio, only AXR2 pin is used as GPIO */
 	status = "okay";
-};
-
-&vin1a {
-	status = "okay";
-	endpoint@0 {
-		slave-mode;
-		remote-endpoint = <&onboardLI>;
-	};
 };
 
 &ipu2 {
@@ -711,4 +711,8 @@
 &dsp2 {
 	status = "okay";
 	memory-region = <&dsp2_memory_region>;
+};
+
+&bb2d {
+	status = "okay";
 };

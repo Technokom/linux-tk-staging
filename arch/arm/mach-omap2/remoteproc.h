@@ -2,7 +2,7 @@
 /*
  * Remote processor machine-specific quirks for OMAP4+ SoCs
  *
- * Copyright (C) 2014-2018 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2014-2019 Texas Instruments Incorporated - http://www.ti.com/
  *      Suman Anna <s-anna@ti.com>
  */
 

@@ -1,9 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
 /* Copyright 2011-2014 Autronica Fire and Security AS
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the Free
- * Software Foundation; either version 2 of the License, or (at your option)
- * any later version.
  *
  * Author(s):
  *	2011-2014 Arvid Brodin, arvid.brodin@alten.se
@@ -19,16 +15,19 @@
 #include "hsr_prp_framereg.h"
 #include "hsr_prp_slave.h"
 
+static int netdev_notify(struct notifier_block *nb, unsigned long event,
+			 void *ptr);
+
 static struct notifier_block hsr_nb = {
-	.notifier_call = hsr_prp_netdev_notify,	/* Slave event notifications */
+	.notifier_call = netdev_notify,	/* Slave event notifications */
 };
 
 static struct notifier_block prp_nb = {
-	.notifier_call = hsr_prp_netdev_notify,	/* Slave event notifications */
+	.notifier_call = netdev_notify,	/* Slave event notifications */
 };
 
-int hsr_prp_netdev_notify(struct notifier_block *nb, unsigned long event,
-			  void *ptr)
+static int netdev_notify(struct notifier_block *nb, unsigned long event,
+			 void *ptr)
 {
 	struct net_device *dev;
 	struct hsr_prp_port *port, *master;
@@ -51,9 +50,9 @@ int hsr_prp_netdev_notify(struct notifier_block *nb, unsigned long event,
 		priv = port->priv;
 	}
 
-	if (priv->prot_ver <= HSR_V1 && nb != &hsr_nb)
+	if (priv->prot_version <= HSR_V1 && nb != &hsr_nb)
 		return NOTIFY_DONE;
-	else if (priv->prot_ver == PRP_V1 && nb != &prp_nb)
+	else if (priv->prot_version == PRP_V1 && nb != &prp_nb)
 		return NOTIFY_DONE;
 
 	switch (event) {
@@ -83,9 +82,8 @@ int hsr_prp_netdev_notify(struct notifier_block *nb, unsigned long event,
 		port = hsr_prp_get_port(priv, HSR_PRP_PT_SLAVE_B);
 		res = hsr_prp_create_self_node(&priv->self_node_db,
 					       master->dev->dev_addr,
-					       port ?
-					       port->dev->dev_addr :
-					       master->dev->dev_addr);
+					       port ? port->dev->dev_addr :
+						      master->dev->dev_addr);
 		if (res)
 			netdev_warn(master->dev,
 				    "Could not update HSR node address.\n");
@@ -131,8 +129,10 @@ int hsr_prp_register_notifier(u8 proto)
 
 void hsr_prp_unregister_notifier(u8 proto)
 {
-	if (proto == PRP)
+	if (proto == PRP) {
 		unregister_netdevice_notifier(&prp_nb);
+		return;
+	}
 
 	unregister_netdevice_notifier(&hsr_nb);
 }

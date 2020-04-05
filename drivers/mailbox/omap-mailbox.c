@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * OMAP mailbox driver
  *
@@ -6,15 +7,6 @@
  *
  * Contact: Hiroshi DOYU <Hiroshi.DOYU@nokia.com>
  *          Suman Anna <s-anna@ti.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
  */
 
 #include <linux/interrupt.h>
@@ -743,7 +735,7 @@ static int omap_mbox_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	finfoblk = devm_kzalloc(&pdev->dev, info_count * sizeof(*finfoblk),
+	finfoblk = devm_kcalloc(&pdev->dev, info_count, sizeof(*finfoblk),
 				GFP_KERNEL);
 	if (!finfoblk)
 		return -ENOMEM;
@@ -787,23 +779,23 @@ static int omap_mbox_probe(struct platform_device *pdev)
 	if (IS_ERR(mdev->mbox_base))
 		return PTR_ERR(mdev->mbox_base);
 
-	mdev->irq_ctx = devm_kzalloc(&pdev->dev, num_users * sizeof(u32),
+	mdev->irq_ctx = devm_kcalloc(&pdev->dev, num_users, sizeof(u32),
 				     GFP_KERNEL);
 	if (!mdev->irq_ctx)
 		return -ENOMEM;
 
 	/* allocate one extra for marking end of list */
-	list = devm_kzalloc(&pdev->dev, (info_count + 1) * sizeof(*list),
+	list = devm_kcalloc(&pdev->dev, info_count + 1, sizeof(*list),
 			    GFP_KERNEL);
 	if (!list)
 		return -ENOMEM;
 
-	chnls = devm_kzalloc(&pdev->dev, (info_count + 1) * sizeof(*chnls),
+	chnls = devm_kcalloc(&pdev->dev, info_count + 1, sizeof(*chnls),
 			     GFP_KERNEL);
 	if (!chnls)
 		return -ENOMEM;
 
-	mboxblk = devm_kzalloc(&pdev->dev, info_count * sizeof(*mbox),
+	mboxblk = devm_kcalloc(&pdev->dev, info_count, sizeof(*mbox),
 			       GFP_KERNEL);
 	if (!mboxblk)
 		return -ENOMEM;
@@ -848,7 +840,7 @@ static int omap_mbox_probe(struct platform_device *pdev)
 	mdev->mboxes = list;
 
 	/*
-	 * OMAP/K3 Mbox IP does not have a Tx-Done IRQ, but rather a Tx-Ready
+	 * OMAP/K3 Mailbox IP does not have a Tx-Done IRQ, but rather a Tx-Ready
 	 * IRQ and is needed to run the Tx state machine
 	 */
 	mdev->controller.txdone_irq = true;
@@ -919,9 +911,8 @@ static int __init omap_mbox_init(void)
 		return err;
 
 	/* kfifo size sanity check: alignment and minimal size */
-	mbox_kfifo_size = ALIGN(mbox_kfifo_size, sizeof(mbox_msg_t));
-	mbox_kfifo_size = max_t(unsigned int, mbox_kfifo_size,
-							sizeof(mbox_msg_t));
+	mbox_kfifo_size = ALIGN(mbox_kfifo_size, sizeof(u32));
+	mbox_kfifo_size = max_t(unsigned int, mbox_kfifo_size, sizeof(u32));
 
 	err = platform_driver_register(&omap_mbox_driver);
 	if (err)

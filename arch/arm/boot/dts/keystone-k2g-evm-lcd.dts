@@ -8,34 +8,16 @@
 #include "keystone-k2g-evm.dts"
 #include <dt-bindings/pwm/pwm.h>
 
+/delete-node/ &hdmi;
+/delete-node/ &sii9022;
+/delete-node/ &sound0;
+
 / {
-	aliases {
-		display0 = &lcd0;
-
-		sound0 = &sound1;
-	};
-
 	lcd0: display {
-		compatible = "newhaven,nhd-4.3-480272ef-atxl", "panel-dpi";
+		compatible = "newhaven,nhd-4.3-480272ef-atxl";
 		label = "lcd";
 
 		backlight = <&lcd_bl>;
-
-		panel-timing {
-			clock-frequency = <9000000>;
-			hactive = <480>;
-			vactive = <272>;
-			hfront-porch = <2>;
-			hback-porch = <2>;
-			hsync-len = <41>;
-			vfront-porch = <2>;
-			vback-porch = <2>;
-			vsync-len = <10>;
-			hsync-active = <0>;
-			vsync-active = <0>;
-			de-active = <1>;
-			pixelclk-active = <1>;
-		};
 
 		port {
 			lcd_in: endpoint {
@@ -106,16 +88,4 @@
 
 &dpi_out {
 	remote-endpoint = <&lcd_in>;
-};
-
-&hdmi {
-	status = "disabled";
-};
-
-&sii9022 {
-	status = "disabled";
-};
-
-&sound0 {
-	status = "disabled";
 };

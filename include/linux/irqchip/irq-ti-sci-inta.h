@@ -11,29 +11,21 @@
 
 #if IS_ENABLED(CONFIG_TI_SCI_INTA_IRQCHIP)
 int ti_sci_inta_register_event(struct device *dev, u16 src_id, u16 src_index,
-			       unsigned int virq, u32 flags);
+			       unsigned int virq, bool ack_needed, u32 flags);
 int ti_sci_inta_unregister_event(struct device *dev, u16 src_id, u16 src_index,
 				 unsigned int virq);
-u8 ti_sci_inta_ack_event(struct irq_domain *domain, u16 src_id, u16 src_index,
-			 unsigned int virq);
 
 #else /* CONFIG_TI_SCI_INTA_IRQCHIP */
 
 static inline int ti_sci_inta_register_event(struct device *dev, u16 src_id,
 					     u16 src_index, unsigned int virq,
-					     u32 flags)
+					     bool ack_needed, u32 flags)
 {
 	return -EINVAL;
 }
 
 static inline int ti_sci_inta_unregister_event(struct device *dev, u16 src_id,
 					       u16 src_index, unsigned int virq)
-{
-	return -EINVAL;
-}
-
-static inline u8 ti_sci_inta_ack_event(struct irq_domain *domain, u16 src_id,
-				       u16 src_index, unsigned int virq)
 {
 	return -EINVAL;
 }

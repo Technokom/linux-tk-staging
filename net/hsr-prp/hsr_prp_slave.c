@@ -1,24 +1,20 @@
+// SPDX-License-Identifier: GPL-2.0
 /* Copyright 2011-2014 Autronica Fire and Security AS
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the Free
- * Software Foundation; either version 2 of the License, or (at your option)
- * any later version.
  *
  * Author(s):
  *	2011-2014 Arvid Brodin, arvid.brodin@alten.se
  */
 
-#include "hsr_prp_slave.h"
 #include <linux/etherdevice.h>
 #include <linux/if_arp.h>
 #include <linux/if_vlan.h>
+#include "hsr_prp_slave.h"
 #include "hsr_prp_main.h"
 #include "hsr_prp_device.h"
 #include "hsr_prp_forward.h"
 #include "hsr_prp_framereg.h"
 
-static rx_handler_result_t hsr_prp_handle_frame(struct sk_buff **pskb)
+static rx_handler_result_t handle_frame(struct sk_buff **pskb)
 {
 	struct sk_buff *skb = *pskb;
 	struct hsr_prp_port *port;
@@ -48,7 +44,7 @@ static rx_handler_result_t hsr_prp_handle_frame(struct sk_buff **pskb)
 
 	if (protocol != htons(ETH_P_PRP) &&
 	    protocol != htons(ETH_P_HSR) &&
-	    port->priv->prot_ver <= HSR_V1 &&
+	    port->priv->prot_version <= HSR_V1 &&
 	    !priv->rx_offloaded)
 		goto finish_pass;
 
@@ -58,8 +54,8 @@ static rx_handler_result_t hsr_prp_handle_frame(struct sk_buff **pskb)
 	if (protocol == htons(ETH_P_HSR) || protocol == htons(ETH_P_PRP))
 		skb_push(skb, ETH_HLEN);
 
-	/* HACK: Not sure why we have to do this as some frames
-	 * don't have the skb->data pointing to mac header
+	/* Not sure why we have to do this as some frames
+	 * don't have the skb->data pointing to mac header for PRP case
 	 */
 	if (skb_mac_header(skb) != skb->data) {
 		skb_push(skb, ETH_HLEN);
@@ -86,16 +82,15 @@ finish_pass:
 
 bool hsr_prp_port_exists(const struct net_device *dev)
 {
-	return rcu_access_pointer(dev->rx_handler) == hsr_prp_handle_frame;
+	return rcu_access_pointer(dev->rx_handler) == handle_frame;
 }
 
-static int hsr_prp_check_dev_ok(struct net_device *dev)
+static int check_dev_ok(struct net_device *dev)
 {
 	/* Don't allow HSR on non-ethernet like devices */
-	if ((dev->flags & IFF_LOOPBACK) || (dev->type != ARPHRD_ETHER) ||
-	    (dev->addr_len != ETH_ALEN)) {
-		netdev_info(dev,
-			    "Can't use lpbk or non-eth device as HSR slave.\n");
+	if ((dev->flags & IFF_LOOPBACK) || dev->type != ARPHRD_ETHER ||
+	    dev->addr_len != ETH_ALEN) {
+		netdev_info(dev, "Cannot use loopback or non-ethernet device as HSR slave.\n");
 		return -EINVAL;
 	}
 
@@ -123,8 +118,7 @@ static int hsr_prp_check_dev_ok(struct net_device *dev)
 }
 
 /* Setup device to be added to the HSR bridge. */
-static int hsr_prp_portdev_setup(struct net_device *dev,
-				 struct hsr_prp_port *port)
+static int portdev_setup(struct net_device *dev, struct hsr_prp_port *port)
 {
 	int res;
 
@@ -138,7 +132,7 @@ static int hsr_prp_portdev_setup(struct net_device *dev,
 	 * res = netdev_master_upper_dev_link(port->dev, port->hsr->dev); ?
 	 */
 
-	res = netdev_rx_handler_register(dev, hsr_prp_handle_frame, port);
+	res = netdev_rx_handler_register(dev, handle_frame, port);
 	if (res)
 		goto fail_rx_handler;
 	dev_disable_lro(dev);
@@ -160,7 +154,7 @@ int hsr_prp_add_port(struct hsr_prp_priv *priv, struct net_device *dev,
 	int res;
 
 	if (type != HSR_PRP_PT_MASTER) {
-		res = hsr_prp_check_dev_ok(dev);
+		res = check_dev_ok(dev);
 		if (res)
 			return res;
 	}
@@ -174,7 +168,7 @@ int hsr_prp_add_port(struct hsr_prp_priv *priv, struct net_device *dev,
 		return -ENOMEM;
 
 	if (type != HSR_PRP_PT_MASTER) {
-		res = hsr_prp_portdev_setup(dev, port);
+		res = portdev_setup(dev, port);
 		if (res)
 			goto fail_dev_setup;
 	}
@@ -216,7 +210,7 @@ void hsr_prp_del_port(struct hsr_prp_port *port)
 	}
 
 	/* FIXME?
-	 * netdev_upper_dev_unlink(port->dev, port->priv->dev);
+	 * netdev_upper_dev_unlink(port->dev, port->hsr->dev);
 	 */
 
 	synchronize_rcu();

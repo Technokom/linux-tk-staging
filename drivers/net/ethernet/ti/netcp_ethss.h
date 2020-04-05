@@ -1,7 +1,7 @@
 /*
  * NetCP ethss header file
  *
- * Copyright (C) 2014 - 2018 Texas Instruments Incorporated
+ * Copyright (C) 2014 - 2019 Texas Instruments Incorporated
  * Authors:	Sandeep Nair <sandeep_n@ti.com>
  *		Sandeep Paulraj <s-paulraj@ti.com>
  *		Cyril Chemparathy <cyril@ti.com>
@@ -92,7 +92,7 @@ struct gbe_priv {
 	u32				num_slaves;
 	u32				ale_entries;
 	u32				ale_ports;
-	bool				enable_ale;
+	int				enable_ale;
 	u8				max_num_slaves;
 	u8				max_num_ports; /* max_num_slaves + 1 */
 	u8				num_stats_mods;
@@ -134,6 +134,8 @@ struct gbe_priv {
 	spinlock_t			hw_stats_lock;
 	int                             cpts_registered;
 	struct cpts                     *cpts;
+	int				rx_ts_enabled;
+	int				tx_ts_enabled;
 
 	struct kobject			kobj;
 	struct kobject			tx_pri_kobj;
@@ -158,7 +160,7 @@ struct gbe_slave {
 	int				slave_num; /* 0 based logical number */
 	int				port_num;  /* actual port number */
 	atomic_t			link_state;
-	bool				open;
+	int				open;
 	struct phy_device		*phy;
 	u32				link_interface;
 	u32				mac_control;
@@ -196,11 +198,11 @@ void gbe_reset_mod_stats_ver14(struct gbe_priv *gbe_dev, int stats_mod);
 #define for_each_intf(i, priv) \
 	list_for_each_entry((i), &(priv)->gbe_intf_head, gbe_intf_list)
 
-#define GBE_REG_ADDR(p, rb, rn) (p->rb + p->rb##_ofs.rn)
-#define GBE_MAJOR_VERSION(reg)		(reg >> 8 & 0x7)
-#define GBE_MINOR_VERSION(reg)		(reg & 0xff)
-#define GBE_RTL_VERSION(reg)		((reg >> 11) & 0x1f)
-#define GBE_IDENT(reg)			((reg >> 16) & 0xffff)
+#define GBE_REG_ADDR(p, rb, rn) ((p)->rb + (p)->rb##_ofs.rn)
+#define GBE_MAJOR_VERSION(reg)		((reg) >> 8 & 0x7)
+#define GBE_MINOR_VERSION(reg)		((reg) & 0xff)
+#define GBE_RTL_VERSION(reg)		(((reg) >> 11) & 0x1f)
+#define GBE_IDENT(reg)			(((reg) >> 16) & 0xffff)
 #define GBE_SS_ID_NU			0x4ee6
 #define GBE_SS_ID_2U			0x4ee8
 #define GBE_SS_VERSION_14		0x4ed2

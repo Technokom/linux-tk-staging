@@ -16,11 +16,11 @@
 #ifndef K3_NAVSS_UDMA_H_
 #define K3_NAVSS_UDMA_H_
 
-#include <linux/soc/ti/k3-navss-ringacc.h>
+#include <linux/soc/ti/k3-ringacc.h>
 
 struct k3_nav_udmax_tx_channel_cfg {
-	struct k3_nav_ring_cfg tx_cfg;
-	struct k3_nav_ring_cfg txcq_cfg;
+	struct k3_ring_cfg tx_cfg;
+	struct k3_ring_cfg txcq_cfg;
 
 	bool tx_pause_on_err;
 	bool tx_filt_einfo;
@@ -31,27 +31,23 @@ struct k3_nav_udmax_tx_channel_cfg {
 
 struct k3_nav_udmax_tx_channel;
 
-struct k3_nav_udmax_tx_channel *k3_nav_udmax_request_tx_chn(
-		struct device *dev,
-		const char *name,
-		struct k3_nav_udmax_tx_channel_cfg *cfg);
+struct k3_nav_udmax_tx_channel *k3_nav_udmax_request_tx_chn(struct device *dev,
+				       const char *name,
+				       struct k3_nav_udmax_tx_channel_cfg *cfg);
 
-void k3_nav_udmax_release_tx_chn(
-		struct k3_nav_udmax_tx_channel *tx_chn);
-int k3_nav_udmax_push_tx_chn(
-		struct k3_nav_udmax_tx_channel *tx_chn,
-		struct cppi5_host_desc_t *desc_tx,
-		dma_addr_t desc_dma);
-int k3_nav_udmax_pop_tx_chn(
-		struct k3_nav_udmax_tx_channel *tx_chn,
-		dma_addr_t *desc_dma);
+void k3_nav_udmax_release_tx_chn(struct k3_nav_udmax_tx_channel *tx_chn);
+int k3_nav_udmax_push_tx_chn(struct k3_nav_udmax_tx_channel *tx_chn,
+			     struct cppi5_host_desc_t *desc_tx,
+			     dma_addr_t desc_dma);
+int k3_nav_udmax_pop_tx_chn(struct k3_nav_udmax_tx_channel *tx_chn,
+			    dma_addr_t *desc_dma);
 int k3_nav_udmax_enable_tx_chn(struct k3_nav_udmax_tx_channel *tx_chn);
 void k3_nav_udmax_disable_tx_chn(struct k3_nav_udmax_tx_channel *tx_chn);
 void k3_nav_udmax_tdown_tx_chn(struct k3_nav_udmax_tx_channel *tx_chn,
 			       bool sync);
-void k3_nav_udmax_reset_tx_chn(
-		struct k3_nav_udmax_tx_channel *tx_chn, void *data,
-		void (*cleanup)(void *data, dma_addr_t desc_dma));
+void k3_nav_udmax_reset_tx_chn(struct k3_nav_udmax_tx_channel *tx_chn,
+			void *data,
+			void (*cleanup)(void *data, dma_addr_t desc_dma));
 u32 k3_nav_udmax_tx_get_hdesc_size(struct k3_nav_udmax_tx_channel *tx_chn);
 u32 k3_nav_udmax_tx_get_txcq_id(struct k3_nav_udmax_tx_channel *tx_chn);
 int k3_nav_udmax_tx_get_irq(struct k3_nav_udmax_tx_channel *tx_chn,
@@ -77,8 +73,8 @@ enum {
  * @src_tag_lo_sel:	Rx Source Tag Low Byte Selector in Host PD
  */
 struct k3_nav_udmax_rx_flow_cfg {
-	struct k3_nav_ring_cfg rx_cfg;
-	struct k3_nav_ring_cfg rxfdq_cfg;
+	struct k3_ring_cfg rx_cfg;
+	struct k3_ring_cfg rxfdq_cfg;
 	int ring_rxq_id;
 	int ring_rxfdq0_id;
 	bool rx_error_handling;
@@ -110,43 +106,34 @@ struct k3_nav_udmax_rx_channel_cfg {
 
 struct k3_nav_udmax_rx_channel;
 
-struct k3_nav_udmax_rx_channel *k3_nav_udmax_request_rx_chn(
-		struct device *dev,
-		const char *name,
-		struct k3_nav_udmax_rx_channel_cfg *cfg);
+struct k3_nav_udmax_rx_channel *k3_nav_udmax_request_rx_chn(struct device *dev,
+				       const char *name,
+				       struct k3_nav_udmax_rx_channel_cfg *cfg);
 
-void k3_nav_udmax_release_rx_chn(
-		struct k3_nav_udmax_rx_channel *rx_chn);
+void k3_nav_udmax_release_rx_chn(struct k3_nav_udmax_rx_channel *rx_chn);
 int k3_nav_udmax_enable_rx_chn(struct k3_nav_udmax_rx_channel *rx_chn);
 void k3_nav_udmax_disable_rx_chn(struct k3_nav_udmax_rx_channel *rx_chn);
 void k3_nav_udmax_tdown_rx_chn(struct k3_nav_udmax_rx_channel *rx_chn,
 			       bool sync);
-int k3_nav_udmax_push_rx_chn(
-		struct k3_nav_udmax_rx_channel *rx_chn,
-		u32 flow_num,
-		struct cppi5_host_desc_t *desc_tx,
-		dma_addr_t desc_dma);
-int k3_nav_udmax_pop_rx_chn(
-		struct k3_nav_udmax_rx_channel *rx_chn,
-		u32 flow_num,
-		dma_addr_t *desc_dma);
-int k3_nav_udmax_rx_flow_init(
-		struct k3_nav_udmax_rx_channel *rx_chn, u32 flow_idx,
-		struct k3_nav_udmax_rx_flow_cfg *flow_cfg);
-u32 k3_nav_udmax_rx_flow_get_fdq_id(
-		struct k3_nav_udmax_rx_channel *rx_chn, u32 flow_idx);
-u32 k3_nav_udmax_rx_get_flow_id_base(
-		struct k3_nav_udmax_rx_channel *rx_chn);
+int k3_nav_udmax_push_rx_chn(struct k3_nav_udmax_rx_channel *rx_chn,
+			     u32 flow_num, struct cppi5_host_desc_t *desc_tx,
+			     dma_addr_t desc_dma);
+int k3_nav_udmax_pop_rx_chn(struct k3_nav_udmax_rx_channel *rx_chn,
+			    u32 flow_num, dma_addr_t *desc_dma);
+int k3_nav_udmax_rx_flow_init(struct k3_nav_udmax_rx_channel *rx_chn,
+			      u32 flow_idx,
+			      struct k3_nav_udmax_rx_flow_cfg *flow_cfg);
+u32 k3_nav_udmax_rx_flow_get_fdq_id(struct k3_nav_udmax_rx_channel *rx_chn,
+				    u32 flow_idx);
+u32 k3_nav_udmax_rx_get_flow_id_base(struct k3_nav_udmax_rx_channel *rx_chn);
 int k3_nav_udmax_rx_get_irq(struct k3_nav_udmax_rx_channel *rx_chn,
-			    u32 flow_num,
-			    unsigned int *irq, u32 flags, bool share,
-			    u32 flow_num_share);
+			    u32 flow_num, unsigned int *irq, u32 flags,
+			    bool share, u32 flow_num_share);
 void k3_nav_udmax_rx_put_irq(struct k3_nav_udmax_rx_channel *rx_chn,
 			     u32 flow_num);
-void k3_nav_udmax_reset_rx_chn(
-		struct k3_nav_udmax_rx_channel *rx_chn,
-		u32 flow_num, void *data,
-		void (*cleanup)(void *data, dma_addr_t desc_dma),
-		bool skip_fdq);
+void k3_nav_udmax_reset_rx_chn(struct k3_nav_udmax_rx_channel *rx_chn,
+			       u32 flow_num, void *data,
+			       void (*cleanup)(void *data, dma_addr_t desc_dma),
+			       bool skip_fdq);
 
 #endif /* K3_NAVSS_UDMA_H_ */

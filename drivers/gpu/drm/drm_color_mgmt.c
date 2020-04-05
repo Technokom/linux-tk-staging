@@ -90,7 +90,8 @@
  * "GAMMA_LUT" property above.
  *
  * Support for different non RGB color encodings is controlled through
- * &drm_plane specific COLOR_ENCODING and COLOR_RANGE properties:
+ * &drm_plane specific COLOR_ENCODING and COLOR_RANGE properties. They
+ * are set up by calling drm_plane_create_color_properties().
  *
  * "COLOR_ENCODING"
  * 	Optional plane enum property to support different non RGB
@@ -243,7 +244,7 @@ int drm_mode_gamma_set_ioctl(struct drm_device *dev,
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
 		return -EINVAL;
 
-	crtc = drm_crtc_find(dev, crtc_lut->crtc_id);
+	crtc = drm_crtc_find(dev, file_priv, crtc_lut->crtc_id);
 	if (!crtc)
 		return -ENOENT;
 
@@ -321,7 +322,7 @@ int drm_mode_gamma_get_ioctl(struct drm_device *dev,
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
 		return -EINVAL;
 
-	crtc = drm_crtc_find(dev, crtc_lut->crtc_id);
+	crtc = drm_crtc_find(dev, file_priv, crtc_lut->crtc_id);
 	if (!crtc)
 		return -ENOENT;
 
@@ -365,17 +366,48 @@ static const char * const color_range_name[] = {
 };
 
 /**
+ * drm_get_color_encoding_name - return a string for color encoding
+ * @encoding: color encoding to compute name of
+ *
+ * In contrast to the other drm_get_*_name functions this one here returns a
+ * const pointer and hence is threadsafe.
+ */
+const char *drm_get_color_encoding_name(enum drm_color_encoding encoding)
+{
+	if (WARN_ON(encoding >= ARRAY_SIZE(color_encoding_name)))
+		return "unknown";
+
+	return color_encoding_name[encoding];
+}
+
+/**
+ * drm_get_color_range_name - return a string for color range
+ * @range: color range to compute name of
+ *
+ * In contrast to the other drm_get_*_name functions this one here returns a
+ * const pointer and hence is threadsafe.
+ */
+const char *drm_get_color_range_name(enum drm_color_range range)
+{
+	if (WARN_ON(range >= ARRAY_SIZE(color_range_name)))
+		return "unknown";
+
+	return color_range_name[range];
+}
+
+/**
  * drm_plane_create_color_properties - color encoding related plane properties
+ * @plane: plane object
  * @supported_encodings: bitfield indicating supported color encodings
  * @supported_ranges: bitfileld indicating supported color ranges
  * @default_encoding: default color encoding
  * @default_range: default color range
  *
  * Create and attach plane specific COLOR_ENCODING and COLOR_RANGE
- * properties to to the drm_plane object. The supported encodings and
- * ranges should be provided in supported_encodings and
- * supported_ranges bitmasks. Each bit set in the bitmask indicates
- * the its number as enum value being supported.
+ * properties to @plane. The supported encodings and ranges should
+ * be provided in supported_encodings and supported_ranges bitmasks.
+ * Each bit set in the bitmask indicates that its number as enum
+ * value is supported.
  */
 int drm_plane_create_color_properties(struct drm_plane *plane,
 				      u32 supported_encodings,
@@ -385,9 +417,19 @@ int drm_plane_create_color_properties(struct drm_plane *plane,
 {
 	struct drm_device *dev = plane->dev;
 	struct drm_property *prop;
-	struct drm_prop_enum_list enum_list[max(DRM_COLOR_ENCODING_MAX,
-						DRM_COLOR_RANGE_MAX)];
+	struct drm_prop_enum_list enum_list[max_t(int, DRM_COLOR_ENCODING_MAX,
+						       DRM_COLOR_RANGE_MAX)];
 	int i, len;
+
+	if (WARN_ON(supported_encodings == 0 ||
+		    (supported_encodings & -BIT(DRM_COLOR_ENCODING_MAX)) != 0 ||
+		    (supported_encodings & BIT(default_encoding)) == 0))
+		return -EINVAL;
+
+	if (WARN_ON(supported_ranges == 0 ||
+		    (supported_ranges & -BIT(DRM_COLOR_RANGE_MAX)) != 0 ||
+		    (supported_ranges & BIT(default_range)) == 0))
+		return -EINVAL;
 
 	len = 0;
 	for (i = 0; i < DRM_COLOR_ENCODING_MAX; i++) {
@@ -399,8 +441,7 @@ int drm_plane_create_color_properties(struct drm_plane *plane,
 		len++;
 	}
 
-	prop = drm_property_create_enum(dev, DRM_MODE_PROP_ATOMIC,
-					"COLOR_ENCODING",
+	prop = drm_property_create_enum(dev, 0, "COLOR_ENCODING",
 					enum_list, len);
 	if (!prop)
 		return -ENOMEM;
@@ -419,8 +460,7 @@ int drm_plane_create_color_properties(struct drm_plane *plane,
 		len++;
 	}
 
-	prop = drm_property_create_enum(dev, DRM_MODE_PROP_ATOMIC,
-					"COLOR_RANGE",
+	prop = drm_property_create_enum(dev, 0,	"COLOR_RANGE",
 					enum_list, len);
 	if (!prop)
 		return -ENOMEM;

@@ -14,9 +14,13 @@
 #include <linux/of_irq.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
-#include "irq-ti-sci-intr.h"
+#include <linux/irqdomain.h>
+#include <linux/soc/ti/ti_sci_protocol.h>
 
 #define MAX_EVENTS_PER_VINT	64
+#define TI_SCI_EVENT_IRQ	BIT(31)
+
+#define VINT_ENABLE_CLR_OFFSET	0x18
 
 /**
  * struct ti_sci_inta_irq_domain - Structure representing a TISCI based
@@ -24,7 +28,6 @@
  * @sci:	Pointer to TISCI handle
  * @vint:	TISCI resource pointer representing IA inerrupts.
  * @global_event:TISCI resource pointer representing global events.
- * @dst_irq:	TISCI resource pointer representing destination irq controller.
  * @base:	Base address of the memory mapped IO registers
  * @ia_id:	TISCI device ID of this Interrupt Aggregator.
  * @dst_id:	TISCI device ID of the destination irq controller.
@@ -33,7 +36,6 @@ struct ti_sci_inta_irq_domain {
 	const struct ti_sci_handle *sci;
 	struct ti_sci_resource *vint;
 	struct ti_sci_resource *global_event;
-	struct ti_sci_resource *dst_irq;
 	void __iomem *base;
 	u16 ia_id;
 	u16 dst_id;
@@ -55,23 +57,46 @@ struct ti_sci_inta_event_desc {
 /**
  * struct ti_sci_inta_vint_desc - Description of a virtual interrupt coming out
  *				  of Interrupt Aggregator.
- * @dst_host_irq:	Destination host IRQ.
- * @vint:		interrupt number with in the Interrupt Aggregator.
  * @lock:		lock to guard the event map
  * @event_map:		Bitmap to manage the allocation of events to vint.
  * @events:		Array of event descriptors assigned to this vint.
+ * @ack_needed:		Event needs to be acked via INTA. This is used when
+ *			HW generating events cannot clear the events by itself.
+ *			Assuming that only events from the same hw block are
+ *			grouped. So all the events attached to vint needs
+ *			an ack or none needs an ack.
  */
 struct ti_sci_inta_vint_desc {
-	u16 dst_host_irq;
-	u16 vint;
 	raw_spinlock_t lock;
 	unsigned long *event_map;
 	struct ti_sci_inta_event_desc events[MAX_EVENTS_PER_VINT];
+	bool ack_needed;
 };
+
+static void ti_sci_inta_irq_eoi(struct irq_data *data)
+{
+	struct ti_sci_inta_irq_domain *inta = data->domain->host_data;
+	struct ti_sci_inta_vint_desc *vint_desc;
+	u64 val;
+	int bit;
+
+	vint_desc = irq_data_get_irq_chip_data(data);
+	if (!vint_desc->ack_needed)
+		goto out;
+
+	for_each_set_bit(bit, vint_desc->event_map, MAX_EVENTS_PER_VINT) {
+		val = 1 << bit;
+		__raw_writeq(val, inta->base + data->hwirq * 0x1000 +
+			     VINT_ENABLE_CLR_OFFSET);
+	}
+
+out:
+	irq_chip_eoi_parent(data);
+}
 
 static struct irq_chip ti_sci_inta_irq_chip = {
 	.name			= "INTA",
-	.irq_eoi		= irq_chip_eoi_parent,
+	.irq_eoi		= ti_sci_inta_irq_eoi,
 	.irq_mask		= irq_chip_mask_parent,
 	.irq_unmask		= irq_chip_unmask_parent,
 	.irq_retrigger		= irq_chip_retrigger_hierarchy,
@@ -110,12 +135,14 @@ static int ti_sci_inta_irq_domain_translate(struct irq_domain *domain,
 /**
  * ti_sci_free_event_irq() - Free an event from vint
  * @inta:	Pointer to Interrupt Aggregator IRQ domain
- * @vint:	Virtual interrupt descriptor containing the event.
- * @event_index:	Event Index within the vint.
+ * @vint_desc:	Virtual interrupt descriptor containing the event.
+ * @event_index:Event Index within the vint.
+ * @dst_irq:	Destination host irq
+ * @vint:	Interrupt number within interrupt aggregator.
  */
 static void ti_sci_free_event_irq(struct ti_sci_inta_irq_domain *inta,
-				  struct ti_sci_inta_vint_desc *vint,
-				  u32 event_index)
+				  struct ti_sci_inta_vint_desc *vint_desc,
+				  u32 event_index, u16 dst_irq, u16 vint)
 {
 	struct ti_sci_inta_event_desc *event;
 	unsigned long flags;
@@ -123,24 +150,19 @@ static void ti_sci_free_event_irq(struct ti_sci_inta_irq_domain *inta,
 	if (event_index >= MAX_EVENTS_PER_VINT)
 		return;
 
-	event = &vint->events[event_index];
+	event = &vint_desc->events[event_index];
 	inta->sci->ops.rm_irq_ops.free_event_irq(inta->sci,
 						 event->src_id,
 						 event->src_index,
 						 inta->dst_id,
-						 vint->dst_host_irq,
-						 inta->ia_id, vint->vint,
+						 dst_irq,
+						 inta->ia_id, vint,
 						 event->global_event,
 						 event_index);
 
-	pr_debug("%s: Event released from src = %d, index = %d, to dst = %d, irq = %d,via ia_id = %d, vint = %d, global event = %d,status_bit = %d\n",
-		 __func__, event->src_id, event->src_index, inta->dst_id,
-		 vint->dst_host_irq, inta->ia_id, vint->vint,
-		 event->global_event, event_index);
-
-	raw_spin_lock_irqsave(&vint->lock, flags);
-	clear_bit(event_index, vint->event_map);
-	raw_spin_unlock_irqrestore(&vint->lock, flags);
+	raw_spin_lock_irqsave(&vint_desc->lock, flags);
+	clear_bit(event_index, vint_desc->event_map);
+	raw_spin_unlock_irqrestore(&vint_desc->lock, flags);
 
 	ti_sci_release_resource(inta->global_event, event->global_event);
 }
@@ -156,21 +178,21 @@ static void ti_sci_inta_irq_domain_free(struct irq_domain *domain,
 {
 	struct ti_sci_inta_irq_domain *inta = domain->host_data;
 	struct ti_sci_inta_vint_desc *vint_desc;
-	struct irq_data *d;
+	struct irq_data *data, *gic_data;
 	int event_index;
 
-	d = irq_domain_get_irq_data(domain, virq);
+	data = irq_domain_get_irq_data(domain, virq);
+	gic_data = irq_domain_get_irq_data(domain->parent->parent, virq);
 
-	vint_desc = irq_data_get_irq_chip_data(d);
+	vint_desc = irq_data_get_irq_chip_data(data);
 
 	/* This is the last event in the vint */
 	event_index = find_first_bit(vint_desc->event_map, MAX_EVENTS_PER_VINT);
-	ti_sci_free_event_irq(inta, vint_desc, event_index);
+	ti_sci_free_event_irq(inta, vint_desc, event_index,
+			      gic_data->hwirq, data->hwirq);
 	irq_domain_free_irqs_parent(domain, virq, 1);
-	irq_domain_reset_irq_data(d);
-	ti_sci_release_resource(inta->vint, vint_desc->vint);
-	if (inta->dst_irq)
-		ti_sci_release_resource(inta->dst_irq, vint_desc->dst_host_irq);
+	ti_sci_release_resource(inta->vint, data->hwirq);
+	irq_domain_reset_irq_data(data);
 	kfree(vint_desc->event_map);
 	kfree(vint_desc);
 }
@@ -181,12 +203,15 @@ static void ti_sci_inta_irq_domain_free(struct irq_domain *domain,
  * @vint_desc:	Virtual interrupt descriptor to which the event gets attached.
  * @src_id:	TISCI device id of the event source
  * @src_index:	Event index with in the device.
+ * @dst_irq:	Destination host irq
+ * @vint:	Interrupt number within interrupt aggregator.
  *
  * Return 0 if all went ok else appropriate error value.
  */
 static int ti_sci_allocate_event_irq(struct ti_sci_inta_irq_domain *inta,
 				     struct ti_sci_inta_vint_desc *vint_desc,
-				     u16 src_id, u16 src_index)
+				     u16 src_id, u16 src_index, u16 dst_irq,
+				     u16 vint)
 {
 	struct ti_sci_inta_event_desc *event;
 	unsigned long flags;
@@ -209,24 +234,18 @@ static int ti_sci_allocate_event_irq(struct ti_sci_inta_irq_domain *inta,
 	event->src_index = src_index;
 	event->global_event = ti_sci_get_free_resource(inta->global_event);
 
-	pr_debug("%s: Event requested from src = %d, index = %d, to dst = %d,irq = %d,via ia_id = %d, vint = %d, global event = %d,status_bit = %d\n",
-		 __func__, src_id, src_index, inta->dst_id,
-		 vint_desc->dst_host_irq, inta->ia_id, vint_desc->vint,
-		 event->global_event, free_bit);
-
 	err = inta->sci->ops.rm_irq_ops.set_event_irq(inta->sci,
-						       src_id, src_index,
-						       inta->dst_id,
-						       vint_desc->dst_host_irq,
-						       inta->ia_id,
-						       vint_desc->vint,
-						       event->global_event,
-						       free_bit);
+						      src_id, src_index,
+						      inta->dst_id,
+						      dst_irq,
+						      inta->ia_id,
+						      vint,
+						      event->global_event,
+						      free_bit);
 	if (err) {
 		pr_err("%s: Event allocation failed from src = %d, index = %d, to dst = %d,irq = %d,via ia_id = %d, vint = %d,global event = %d, status_bit = %d\n",
-		       __func__, src_id, src_index, inta->dst_id,
-		       vint_desc->dst_host_irq, inta->ia_id, vint_desc->vint,
-		       event->global_event, free_bit);
+		       __func__, src_id, src_index, inta->dst_id, dst_irq,
+		       inta->ia_id, vint, event->global_event, free_bit);
 		return err;
 	}
 
@@ -252,6 +271,7 @@ static struct ti_sci_inta_vint_desc *alloc_parent_irq(struct irq_domain *domain,
 {
 	struct ti_sci_inta_irq_domain *inta = domain->host_data;
 	struct ti_sci_inta_vint_desc *vint_desc;
+	struct irq_data *gic_data;
 	struct irq_fwspec fwspec;
 	int err;
 
@@ -270,33 +290,23 @@ static struct ti_sci_inta_vint_desc *alloc_parent_irq(struct irq_domain *domain,
 		return ERR_PTR(-ENOMEM);
 	}
 
-	vint_desc->vint = vint;
 	fwspec.fwnode = domain->parent->fwnode;
 	fwspec.param_count = 3;
-	if (!inta->dst_irq) {
-		/* Interrupt parent is Interrupt Router */
-		fwspec.param[0] = inta->ia_id;
-		fwspec.param[1] = vint_desc->vint;
-		fwspec.param[2] = flags | TI_SCI_IS_EVENT_IRQ;
-	} else {
-		/* Interrupt parent is GIC */
-		fwspec.param[0] = 0;	/* SPI */
-		fwspec.param[1] = ti_sci_get_free_resource(inta->dst_irq) - 32;
-		fwspec.param[2] = flags;
-		vint_desc->dst_host_irq = fwspec.param[1];
-	}
+	/* Interrupt parent is Interrupt Router */
+	fwspec.param[0] = inta->ia_id;
+	fwspec.param[1] = vint;
+	fwspec.param[2] = flags | TI_SCI_EVENT_IRQ;
 
 	err = irq_domain_alloc_irqs_parent(domain, virq, 1, &fwspec);
 	if (err)
 		goto err_irqs;
 
-	if (!inta->dst_irq)
-		vint_desc->dst_host_irq =
-				ti_sci_intr_get_dst_irq(domain->parent, virq);
+	gic_data = irq_domain_get_irq_data(domain->parent->parent, virq);
 
 	raw_spin_lock_init(&vint_desc->lock);
 
-	err = ti_sci_allocate_event_irq(inta, vint_desc, src_id, src_index);
+	err = ti_sci_allocate_event_irq(inta, vint_desc, src_id, src_index,
+					gic_data->hwirq, vint);
 	if (err)
 		goto err_events;
 
@@ -305,9 +315,7 @@ static struct ti_sci_inta_vint_desc *alloc_parent_irq(struct irq_domain *domain,
 err_events:
 	irq_domain_free_irqs_parent(domain, virq, 1);
 err_irqs:
-	if (inta->dst_irq)
-		ti_sci_release_resource(inta->dst_irq, vint_desc->dst_host_irq);
-	ti_sci_release_resource(inta->vint, vint_desc->vint);
+	ti_sci_release_resource(inta->vint, vint);
 	kfree(vint_desc);
 	return ERR_PTR(err);
 }
@@ -329,22 +337,16 @@ static int ti_sci_inta_irq_domain_alloc(struct irq_domain *domain,
 	struct irq_fwspec *fwspec = data;
 	int err;
 
-	/* Continuous allocation not yet supported */
-	if (nr_irqs > 1)
-		return -EINVAL;
-
 	vint_desc = alloc_parent_irq(domain, virq, fwspec->param[0],
 				     fwspec->param[1], fwspec->param[2],
 				     fwspec->param[3]);
 	if (IS_ERR(vint_desc))
 		return PTR_ERR(vint_desc);
 
-	err = irq_domain_set_hwirq_and_chip(domain, virq, vint_desc->vint,
+	err = irq_domain_set_hwirq_and_chip(domain, virq, fwspec->param[2],
 					    &ti_sci_inta_irq_chip, vint_desc);
-	if (err)
-		return err;
 
-	return 0;
+	return err;
 }
 
 static const struct irq_domain_ops ti_sci_inta_irq_domain_ops = {
@@ -376,7 +378,7 @@ static int ti_sci_inta_irq_domain_probe(struct platform_device *pdev)
 	if (!inta)
 		return -ENOMEM;
 
-	inta->sci = ti_sci_get_by_phandle(dev_of_node(dev), "ti,sci");
+	inta->sci = devm_ti_sci_get_by_phandle(dev, "ti,sci");
 	if (IS_ERR(inta->sci)) {
 		ret = PTR_ERR(inta->sci);
 		if (ret != -EPROBE_DEFER)
@@ -385,15 +387,25 @@ static int ti_sci_inta_irq_domain_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	ret = of_property_read_u32(dev->of_node, "ti,sci-dev-id",
+				   (u32 *)&inta->ia_id);
+	if (ret) {
+		dev_err(dev, "missing 'ti,sci-dev-id' property\n");
+		return -EINVAL;
+	}
+
 	inta->vint = devm_ti_sci_get_of_resource(inta->sci, dev,
-						 "ti,sci-vint-type");
+						 inta->ia_id,
+						 "ti,sci-rm-range-vint");
 	if (IS_ERR(inta->vint)) {
 		dev_err(dev, "VINT resource allocation failed\n");
 		return PTR_ERR(inta->vint);
 	}
 
-	inta->global_event = devm_ti_sci_get_of_resource(inta->sci, dev,
-						"ti,sci-global-event-type");
+	inta->global_event =
+		devm_ti_sci_get_of_resource(inta->sci, dev,
+					    inta->ia_id,
+					    "ti,sci-rm-range-global-event");
 	if (IS_ERR(inta->global_event)) {
 		dev_err(dev, "Global event resource allocation failed\n");
 		return PTR_ERR(inta->global_event);
@@ -404,35 +416,8 @@ static int ti_sci_inta_irq_domain_probe(struct platform_device *pdev)
 	if (IS_ERR(inta->base))
 		return -ENODEV;
 
-	ret = of_property_read_u32(dev->of_node, "ti,sci-dev-id",
-				   (u32 *)&inta->ia_id);
-	if (ret) {
-		dev_err(dev, "missing 'ti,sci-dev-id' property\n");
-		return -EINVAL;
-	}
-
-	inta->dst_irq = devm_ti_sci_get_of_resource(inta->sci, dev,
-						    "ti,sci-dst-irq-type");
-	if (!IS_ERR(inta->dst_irq)) {
-		/*
-		 * If dst type is specified, assume GIC is the parent
-		 * then look for dst id
-		 */
-		ret = of_property_read_u32(dev_of_node(dev), "ti,sci-dst-id",
-					   (u32 *)&inta->dst_id);
-		if (ret) {
-			dev_err(dev, "missing 'ti,sci-dst-id' property\n");
-			return -EINVAL;
-		}
-	} else {
-		if (PTR_ERR(inta->dst_irq) != -EINVAL) {
-			dev_err(dev, "irq resource allocation failed\n");
-			return PTR_ERR(inta->dst_irq);
-		}
-		/* If dst is not specified, assume INTR is the parent */
-		inta->dst_irq = NULL;
-		inta->dst_id = ti_sci_intr_get_dst_id(parent_domain);
-	}
+	ret = of_property_read_u32(parent_node, "ti,sci-dst-id",
+				   (u32 *)&inta->dst_id);
 
 	domain = irq_domain_add_hierarchy(parent_domain, 0, 0, dev_of_node(dev),
 					  &ti_sci_inta_irq_domain_ops, inta);
@@ -450,21 +435,26 @@ static int ti_sci_inta_irq_domain_probe(struct platform_device *pdev)
  * @src_id:	TISCI device ID of the event source
  * @src_index:	Event source index within the device.
  * @virq:	Linux Virtual IRQ number
+ * @ack_needed:	If explicit clearing of event is required.
  * @flags:	Corresponding IRQ flags
  *
  * Creates a new irq and attaches to IA domain if virq is not specified
  * else attaches the event to vint corresponding to virq.
+ * When using TISCI within the client drivers, source indexes are always
+ * generated dynamically and cannot be represented in DT. So client
+ * drivers should call this API instead of platform_get_irq().
+ *
  * Return virq if all went well else appropriate error value.
  */
 int ti_sci_inta_register_event(struct device *dev, u16 src_id, u16 src_index,
-			       unsigned int virq, u32 flags)
+			       unsigned int virq, bool ack_needed, u32 flags)
 {
 	struct ti_sci_inta_vint_desc *vint_desc;
 	struct ti_sci_inta_irq_domain *inta;
+	struct irq_data *data, *gic_data;
 	struct device_node *parent_node;
 	struct irq_domain *domain;
 	struct irq_fwspec fwspec;
-	struct irq_data *d;
 	int err;
 
 	parent_node = of_irq_find_parent(dev->of_node);
@@ -477,14 +467,17 @@ int ti_sci_inta_register_event(struct device *dev, u16 src_id, u16 src_index,
 
 	inta = domain->host_data;
 
-	/* ToDo: Handle Polling mode */
 	if (virq > 0) {
 		/* If Group already available */
-		d = irq_domain_get_irq_data(domain, virq);
-		vint_desc = irq_data_get_irq_chip_data(d);
+		data = irq_domain_get_irq_data(domain, virq);
+		gic_data = irq_domain_get_irq_data(domain->parent->parent,
+						   virq);
+
+		vint_desc = irq_data_get_irq_chip_data(data);
 
 		err = ti_sci_allocate_event_irq(inta, vint_desc, src_id,
-						src_index);
+						src_index, gic_data->hwirq,
+						data->hwirq);
 		if (err)
 			return err;
 	} else {
@@ -498,6 +491,10 @@ int ti_sci_inta_register_event(struct device *dev, u16 src_id, u16 src_index,
 		virq = irq_create_fwspec_mapping(&fwspec);
 		if (virq <= 0)
 			ti_sci_release_resource(inta->vint, fwspec.param[2]);
+
+		data = irq_domain_get_irq_data(domain, virq);
+		vint_desc = irq_data_get_irq_chip_data(data);
+		vint_desc->ack_needed = ack_needed;
 	}
 
 	return virq;
@@ -567,9 +564,9 @@ void ti_sci_inta_unregister_event(struct device *dev, u16 src_id,
 				  u16 src_index, unsigned int virq)
 {
 	struct ti_sci_inta_vint_desc *vint_desc;
+	struct irq_data *data, *gic_data;
 	struct device_node *parent_node;
 	struct irq_domain *domain;
-	struct irq_data *d;
 	u8 event_index;
 
 	parent_node = of_irq_find_parent(dev->of_node);
@@ -578,9 +575,10 @@ void ti_sci_inta_unregister_event(struct device *dev, u16 src_id,
 
 	domain = irq_find_host(parent_node);
 
-	d = irq_domain_get_irq_data(domain, virq);
+	data = irq_domain_get_irq_data(domain, virq);
+	gic_data = irq_domain_get_irq_data(domain->parent->parent, virq);
 
-	vint_desc = irq_data_get_irq_chip_data(d);
+	vint_desc = irq_data_get_irq_chip_data(data);
 
 	event_index = get_event_index(vint_desc, src_id, src_index);
 	if (event_index == MAX_EVENTS_PER_VINT)
@@ -590,36 +588,10 @@ void ti_sci_inta_unregister_event(struct device *dev, u16 src_id,
 		irq_dispose_mapping(virq);
 	else
 		ti_sci_free_event_irq(domain->host_data, vint_desc,
-				      event_index);
+				      event_index, gic_data->hwirq,
+				      data->hwirq);
 }
 EXPORT_SYMBOL_GPL(ti_sci_inta_unregister_event);
-
-u8 ti_sci_inta_ack_event(struct irq_domain *domain, u16 src_id, u16 src_index,
-			 unsigned int virq)
-{
-	struct ti_sci_inta_vint_desc *vint_desc;
-	struct ti_sci_inta_irq_domain *inta;
-	struct irq_data *d;
-	u8 event_index;
-	u64 val;
-
-	if (!domain)
-		return -ENODEV;
-
-	inta = domain->host_data;
-	d = irq_domain_get_irq_data(domain, virq);
-
-	vint_desc = irq_data_get_irq_chip_data(d);
-	event_index = get_event_index(vint_desc, src_id, src_index);
-	if (event_index == MAX_EVENTS_PER_VINT)
-		return -ENODEV;
-
-	val = 1 << event_index;
-	__raw_writeq(val, inta->base + (vint_desc->vint * 0x1000 + 0x18));
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(ti_sci_inta_ack_event);
 
 static const struct of_device_id ti_sci_inta_irq_domain_of_match[] = {
 	{ .compatible = "ti,sci-inta", },

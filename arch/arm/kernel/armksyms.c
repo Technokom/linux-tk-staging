@@ -20,7 +20,6 @@
 
 #include <asm/checksum.h>
 #include <asm/ftrace.h>
-#include <asm/virt.h>
 
 /*
  * libgcc functions - functions that are used internally by the
@@ -93,7 +92,6 @@ EXPORT_SYMBOL(__memset64);
 EXPORT_SYMBOL(memcpy);
 EXPORT_SYMBOL(memmove);
 EXPORT_SYMBOL(memchr);
-EXPORT_SYMBOL(__memzero);
 
 EXPORT_SYMBOL(mmioset);
 EXPORT_SYMBOL(mmiocpy);
@@ -186,5 +184,6 @@ EXPORT_SYMBOL(__arm_smccc_hvc);
 #endif
 
 #ifdef CONFIG_ARM_VIRT_EXT
-EXPORT_SYMBOL_GPL(__boot_cpu_mode);
+extern char __hyp_stub_vectors[];
+EXPORT_SYMBOL(__hyp_stub_vectors);
 #endif

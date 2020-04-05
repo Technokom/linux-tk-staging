@@ -1,7 +1,7 @@
-/*
- * PRU Ethernet driver
+/* SPDX-License-Identifier: GPL-2.0 */
+/* PRU Ethernet driver
  *
- * Copyright (C) 2015-2017 Texas Instruments Incorporated - http://www.ti.com
+ * Copyright (C) 2015-2018 Texas Instruments Incorporated - http://www.ti.com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -21,11 +21,49 @@
 #include <linux/kthread.h>
 #include <linux/pruss.h>
 #include <linux/if_ether.h>
+#include <net/lredev.h>
+#include <linux/netdev_features.h>
 #ifdef CONFIG_PREEMPT_RT_FULL
 #include <linux/swork.h>
 #endif
 #include "icss_switch.h"
 #include "icss_time_sync.h"
+
+/* ECAP registers */
+#define ECAP_TSCTR                      0
+#define ECAP_CAP1                       8
+#define ECAP_CAP2                       0xC
+#define ECAP_ECCTL1                     0x28
+#define ECAP_ECCTL2                     0x2A
+#define ECAP_ECEINT                     0x2C
+#define ECAP_ECCLR                      0x30
+
+#define ECAP_ECCTL2_TSCTRSTOP_MASK      0x10
+#define ECAP_ECCTL2_CAP_APWM_MASK       0x200
+#define ECAP_ECCLR_INT_MASK             1
+#define ECAP_ECCLR_CEVT1_MASK           2
+#define ECAP_ECCLR_CEVT2_MASK           4
+#define ECAP_ECCLR_CEVT3_MASK           8
+#define ECAP_ECCLR_CEVT4_MASK           0x10
+#define ECAP_ECCLR_CNTOVF_MASK          0x20
+#define ECAP_ECCLR_PRDEQ_MASK           0x40
+#define ECAP_ECCLR_CMPEQ_MASK           0x80
+#define ECAP_ECEINT_PRDEQ_MASK          0x40
+
+#define ECAP_ECCTL2_INIT_VAL           (ECAP_ECCTL2_TSCTRSTOP_MASK | \
+					ECAP_ECCTL2_CAP_APWM_MASK)
+#define ECAP_CAP2_MAX_COUNT            0xFFFFFFFF
+#define ECAP_ECCLR_CLR_VAL             0xFF
+
+/* in usec */
+#define DEFAULT_RX_TIMEOUT_USEC       123
+/* Duration of 3 frames of 1528 bytes each. If we go beyond this,
+ * receive buffer overflow may happen assuming 4 MTU buffer. So
+ * set this as the limit
+ */
+#define MAX_RX_TIMEOUT_USEC            (123 * 3)
+/* ECAP has 200Mhz clock. So each tick is 5 nsec. i.e 1000/200 */
+#define ECAP_TICK_NSEC                  5
 
 /**
  * struct prueth_queue_desc - Queue descriptor
@@ -58,6 +96,7 @@ struct prueth_queue_desc {
 #define PRUETH_MASTER_QUEUE_BUSY		BIT(0)
 #define PRUETH_PACKET_IN_COLLISION_QUEUE	BIT(1)
 #define PRUETH_PACKET_DISCARD_OVFL		BIT(2)
+
 /**
  * struct prueth_queue - Information about a queue in memory
  * @buffer_offset: buffer offset in OCMC RAM
@@ -93,7 +132,7 @@ struct prueth_col_tx_context_info {
  * @length: length of packet
  * @broadcast: this packet is a broadcast packet
  * @error: this packet has an error
- * @sv_frame: this packet is a supper frame
+ * @sv_frame: this packet is a supervision frame
  */
 struct prueth_packet_info {
 	bool start_offset;
@@ -163,38 +202,38 @@ struct prueth_packet_info {
  * memcpy. Don't change the order of the fields.
  */
 struct port_statistics {
-	u32 tx_bcast;			/* 0x1F00 */
+	u32 tx_bcast;
 	u32 tx_mcast;
 	u32 tx_ucast;
 
 	u32 tx_octets;
 
-	u32 rx_bcast;			/* 0x1F10 */
+	u32 rx_bcast;
 	u32 rx_mcast;
 	u32 rx_ucast;
 
 	u32 rx_octets;
 
-	u32 tx64byte;			/* 0x1F20 */
+	u32 tx64byte;
 	u32 tx65_127byte;
 	u32 tx128_255byte;
 	u32 tx256_511byte;
-	u32 tx512_1023byte;		/* 0x1F30 */
+	u32 tx512_1023byte;
 	u32 tx1024byte;
 
 	u32 rx64byte;
 	u32 rx65_127byte;
-	u32 rx128_255byte;		/* 0x1F40 */
+	u32 rx128_255byte;
 	u32 rx256_511byte;
 	u32 rx512_1023byte;
 	u32 rx1024byte;
 
-	u32 late_coll;			/* 0x1F50 */
+	u32 late_coll;
 	u32 single_coll;
 	u32 multi_coll;
 	u32 excess_coll;
 
-	u32 rx_misalignment_frames;	/* 0x1F60 */
+	u32 rx_misalignment_frames;
 	u32 stormprev_counter;
 	u32 mac_rxerror;
 	u32 sfd_error;
@@ -210,6 +249,11 @@ struct port_statistics {
 
 	u32 cs_error;
 	u32 sqe_test_error;
+} __packed;
+
+struct emac_statistics {
+	u32 vlan_dropped;
+	u32 multicast_dropped;
 } __packed;
 
 struct lre_statistics {
@@ -268,11 +312,6 @@ struct lre_statistics {
 	u32 lre_cnt_sup_pru1; /* count of supervisor frames to host on PRU 1 */
 } __packed;
 
-struct emac_statistics {
-	u32 vlan_dropped;
-	u32 multicast_dropped;
-} __packed;
-
 struct prueth_hsr_prp_node {
 	u8 mac[6];
 	u8 state;
@@ -298,7 +337,8 @@ struct prueth_hsr_prp_node {
 #define TX_MIN_IPG		0xb8
 
 #define TX_START_DELAY		0x40
-#define TX_CLK_DELAY		0x6
+#define TX_CLK_DELAY_100M       0x6
+#define TX_CLK_DELAY_10M        0
 
 /* PRUSS local memory map */
 #define ICSS_LOCAL_SHARED_RAM   0x00010000
@@ -346,6 +386,7 @@ enum pruss_ethtype {
 };
 
 #define TAG_OR_RCT_LEN		6
+#define SV_FRAME_OFFSET         20
 /* for HSR and PRP */
 #define PRUETH_MAX_PKTLEN_RED	(PRUETH_MAX_PKTLEN_EMAC + TAG_OR_RCT_LEN)
 #define PRUETH_IS_EMAC(p)	((p)->eth_type == PRUSS_ETHTYPE_EMAC)
@@ -363,21 +404,19 @@ enum pruss_ethtype {
 #define MS_TO_NS(msec)		((msec) * 1000 * 1000)
 #define PRUETH_RED_TABLE_CHECK_PERIOD_MS	10
 #define PRUETH_HAS_PTP(p) \
-	((PRUETH_HAS_PRP(p) || PRUETH_HAS_HSR(p) || PRUETH_IS_EMAC(p)) && \
-	 p->fw_data->ptp_support)
-/* NSP (Network Storm Prevention) timer re-uses NT timer */
-#define PRUETH_DEFAULT_NSP_TIMER_MS	100
-#define PRUETH_DEFAULT_NSP_TIMER_COUNT	\
-		(PRUETH_DEFAULT_NSP_TIMER_MS / PRUETH_RED_TABLE_CHECK_PERIOD_MS)
-#define PRUETH_NSP_CREDIT_SHIFT       8
-#define PRUETH_NSP_ENABLE             1
-#define PRUETH_NSP_DISABLE            0
-#define PRUETH_NSP_EN_MASK            0xff
-
+	(PRUETH_HAS_PRP(p) || PRUETH_HAS_HSR(p) || PRUETH_IS_EMAC(p))
 /* A group of PCPs are mapped to a Queue. This is the size of firmware
  * array in shared memory
  */
 #define PCP_GROUP_TO_QUEUE_MAP_SIZE	4
+/* NSP (Network Storm Prevention) timer re-uses NT timer */
+#define PRUETH_DEFAULT_NSP_TIMER_MS	100
+#define PRUETH_DEFAULT_NSP_TIMER_COUNT	\
+		(PRUETH_DEFAULT_NSP_TIMER_MS / 10)
+#define PRUETH_NSP_CREDIT_SHIFT       8
+#define PRUETH_NSP_ENABLE             1
+#define PRUETH_NSP_DISABLE            0
+#define PRUETH_NSP_EN_MASK            0xff
 
 /* In switch mode there are 3 real ports i.e. 3 mac addrs.
  * however Linux sees only the host side port. The other 2 ports
@@ -440,13 +479,6 @@ enum prueth_mem {
 	PRUETH_MEM_MAX,
 };
 
-/**
- * @fw_name: firmware names of firmware to run on PRU
- */
-struct prueth_firmwares {
-	const char *fw_name[PRUSS_ETHTYPE_MAX];
-};
-
 enum fw_revision {
 	FW_REV_V1_0 = 0,
 	FW_REV_V2_1
@@ -472,15 +504,20 @@ struct prueth_fw_offsets {
 };
 
 /**
+ * @fw_name: firmware names of firmware to run on PRU
+ */
+struct prueth_firmwares {
+	const char *fw_name[PRUSS_ETHTYPE_MAX];
+};
+
+/**
  * struct prueth_private_data - PRU Ethernet private data
- * @driver_data: soc that contains the pruss
- * @fw_pru: firmware to run on each pruss
+ * @fw_names: firmware names to be used for PRUSS ethernet usecases
  */
 struct prueth_private_data {
 	enum pruss_device driver_data;
 	struct prueth_firmwares fw_pru[PRUSS_NUM_PRUS];
 	enum fw_revision fw_rev;
-	u8 ptp_support;
 };
 
 struct tx_ev_cb_data {
@@ -507,9 +544,13 @@ struct prueth_emac {
 	struct phy_device *phydev;
 
 	enum prueth_port port_id;
-	/* emac mode irqs */
+
+	enum prueth_mem dram;
+
 	int rx_irq;
 	int tx_irq;
+	int rx_lp_irq;
+	int rx_hp_irq;
 
 	struct prueth_queue_desc __iomem *rx_queue_descs;
 	struct prueth_queue_desc __iomem *tx_queue_descs;
@@ -553,6 +594,9 @@ struct prueth_emac {
 	spinlock_t            ct_lock; /* serialize accesses to ct_ev_msg[] */
 	struct kthread_worker         *ct_kworker;
 	struct kthread_delayed_work    ct_work;
+
+	u32 rx_int_pacing_offset;
+	unsigned int rx_pacing_timeout;
 };
 
 struct prueth_mmap_port_cfg_basis {
@@ -604,6 +648,11 @@ struct prueth_mmap_ocmc_cfg {
 	u16 buffer_offset[PRUETH_PORT_MAX][NUM_QUEUES];
 };
 
+struct prueth_ndev_priority {
+	struct net_device *ndev;
+	int priority;
+};
+
 /**
  * struct prueth - PRUeth structure
  * @dev: device
@@ -612,6 +661,8 @@ struct prueth_mmap_ocmc_cfg {
  * @pru1: rproc instance to PRU1
  * @mem: PRUSS memory resources we need to access
  * @sram_pool: OCMC ram pool for buffers
+ * @mii_rt: regmap to mii_rt block
+ * @iep: regmap to IEP block
  *
  * @eth_node: node for each emac node
  * @emac: emac data for three ports, one host and two physical
@@ -625,15 +676,18 @@ struct prueth {
 	struct rproc *pru0, *pru1;
 	struct pruss_mem_region mem[PRUETH_MEM_MAX];
 	struct gen_pool *sram_pool;
+	struct prueth_ndev_priority *hp, *lp;
+	struct regmap *mii_rt;
 
 	int fw_drop_untagged_vlan;
+	enum iec62439_3_tr_modes prp_tr_mode;
 	struct device_node *eth_node[PRUETH_NUM_MACS];
 	struct device_node *prueth_np;
 	struct prueth_emac *emac[PRUETH_NUM_MACS];
 	struct net_device *registered_netdevs[PRUETH_NUM_MACS];
+	int pruss_id;
 	const struct prueth_private_data *fw_data;
 	struct prueth_fw_offsets *fw_offsets;
-	int pruss_id;
 	size_t ocmc_ram_size;
 	unsigned int eth_type;
 	unsigned int hsr_mode;
@@ -642,6 +696,7 @@ struct prueth {
 	unsigned int node_table_clear;
 	unsigned int node_table_clear_last_cmd;
 	unsigned int tbl_check_mask;
+	unsigned int priority_ts;
 	struct hrtimer tbl_check_timer;
 	struct prueth_mmap_port_cfg_basis mmap_port_cfg_basis[PRUETH_PORT_MAX];
 	struct prueth_mmap_sram_cfg mmap_sram_cfg;
@@ -649,7 +704,6 @@ struct prueth {
 	struct lre_statistics lre_stats;
 	struct emac_statistics emac_stats;
 	struct iep *iep;
-	unsigned int rx_pacing_timeout;
 	/* To provide a synchronization point to wait before proceed to port
 	 * specific initialization or configuration. This is needed when
 	 * concurrent device open happens.

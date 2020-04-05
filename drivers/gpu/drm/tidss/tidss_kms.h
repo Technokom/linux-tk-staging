@@ -9,6 +9,6 @@
 
 struct tidss_device;
 
-int tidss_modeset_init(struct tidss_device *rcdu);
+int tidss_modeset_init(struct tidss_device *tidss);
 
 #endif

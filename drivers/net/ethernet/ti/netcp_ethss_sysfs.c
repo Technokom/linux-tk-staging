@@ -1,7 +1,7 @@
 /*
  * Keystone GBE and XGBE sysfs driver code
  *
- * Copyright (C) 2016 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2016-2019 Texas Instruments Incorporated - http://www.ti.com/
  *
  * Authors:	Sandeep Nair <sandeep_n@ti.com>
  *		Sandeep Paulraj <s-paulraj@ti.com>
@@ -26,7 +26,7 @@
 #define pvlan_to_gbe_dev(obj) container_of(obj, struct gbe_priv, pvlan_kobj)
 #define stats_to_gbe_dev(obj) container_of(obj, struct gbe_priv, stats_kobj)
 #define gbe_sw_mod_info_field_val(r, i) \
-	((r & BITMASK(i->bits, i->shift)) >> i->shift)
+	(((r) & BITMASK((i)->bits, (i)->shift)) >> (i)->shift)
 
 #define __GBE_SW_ATTR_FULL(_name, _mode, _show, _store, _info,	\
 				_info_size, _ctxt)		\
@@ -75,7 +75,8 @@ struct gbe_attribute {
 	ssize_t (*show)(struct gbe_priv *gbe_dev,
 			struct gbe_attribute *attr, char *buf);
 	ssize_t	(*store)(struct gbe_priv *gbe_dev,
-			 struct gbe_attribute *attr, const char *, size_t);
+			 struct gbe_attribute *attr,
+			 const char *buf, size_t size);
 	const struct gbe_sw_mod_info *info;
 	ssize_t info_size;
 	void *context;
@@ -1108,7 +1109,7 @@ static ssize_t gbe_sw_stats_mod_store(struct gbe_priv *gbe_dev,
 	int stat_mod, max_ports;
 	unsigned long end;
 
-	if (kstrtoul(buf, 0, &end) != 0 || (end != 0))
+	if (kstrtoul(buf, 0, &end) != 0 || end != 0)
 		return -EINVAL;
 
 	stat_mod = (int)(attr->context);

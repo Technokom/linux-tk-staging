@@ -1581,7 +1581,8 @@ static int bnx2x_get_module_info(struct net_device *dev,
 	}
 
 	if (!sff8472_comp ||
-	    (diag_type & SFP_EEPROM_DIAG_ADDR_CHANGE_REQ)) {
+	    (diag_type & SFP_EEPROM_DIAG_ADDR_CHANGE_REQ) ||
+	    !(diag_type & SFP_EEPROM_DDM_IMPLEMENTED)) {
 		modinfo->type = ETH_MODULE_SFF_8079;
 		modinfo->eeprom_len = ETH_MODULE_SFF_8079_LEN;
 	} else {
@@ -2591,8 +2592,9 @@ static int bnx2x_run_loopback(struct bnx2x *bp, int loopback_mode)
 	wmb();
 
 	txdata->tx_db.data.prod += 2;
-	barrier();
-	DOORBELL(bp, txdata->cid, txdata->tx_db.raw);
+	/* make sure descriptor update is observed by the HW */
+	wmb();
+	DOORBELL_RELAXED(bp, txdata->cid, txdata->tx_db.raw);
 
 	mmiowb();
 	barrier();

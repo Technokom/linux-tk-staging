@@ -114,9 +114,8 @@ enum {
 #define CPTS_EVENT_RX_TX_TIMEOUT 20 /* ms */
 #define CPTS_EVENT_HWSTAMP_TIMEOUT 200 /* ms */
 
-#ifdef CONFIG_TI_1PPS_DM_TIMER
-#define CPTS_MAX_LATCH	3
-#endif
+#define CPTS_MAX_EXT_TS 4
+#define CPTS_PPS_HW_INDEX 3
 
 struct cpts_event {
 	struct list_head list;
@@ -152,8 +151,11 @@ struct cpts {
 	u32 caps;
 
 #ifdef CONFIG_TI_1PPS_DM_TIMER
-	bool use_1pps;
-	bool pps_latch_receive;
+	u8 use_1pps_gen;
+	u8 use_1pps_latch;
+	u8 use_1pps_ref;
+	u8 pps_latch_receive;
+	int pps_hw_index;
 	int pps_enable;
 	int pps_state;
 	int pps_latch_state;
@@ -193,26 +195,6 @@ void cpts_unregister(struct cpts *cpts);
 struct cpts *cpts_create(struct device *dev, void __iomem *regs,
 			 struct device_node *node);
 void cpts_release(struct cpts *cpts);
-
-static inline void cpts_rx_enable(struct cpts *cpts, int enable)
-{
-	cpts->rx_enable = enable;
-}
-
-static inline bool cpts_is_rx_enabled(struct cpts *cpts)
-{
-	return !!cpts->rx_enable;
-}
-
-static inline void cpts_tx_enable(struct cpts *cpts, int enable)
-{
-	cpts->tx_enable = enable;
-}
-
-static inline bool cpts_is_tx_enabled(struct cpts *cpts)
-{
-	return !!cpts->tx_enable;
-}
 
 static inline bool cpts_can_timestamp(struct cpts *cpts, struct sk_buff *skb)
 {
@@ -256,24 +238,6 @@ cpts_register(struct cpts *cpts)
 
 static inline void cpts_unregister(struct cpts *cpts)
 {
-}
-
-static inline void cpts_rx_enable(struct cpts *cpts, int enable)
-{
-}
-
-static inline bool cpts_is_rx_enabled(struct cpts *cpts)
-{
-	return false;
-}
-
-static inline void cpts_tx_enable(struct cpts *cpts, int enable)
-{
-}
-
-static inline bool cpts_is_tx_enabled(struct cpts *cpts)
-{
-	return false;
 }
 
 static inline bool cpts_can_timestamp(struct cpts *cpts, struct sk_buff *skb)

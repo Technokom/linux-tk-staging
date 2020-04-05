@@ -1,17 +1,9 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * TI pm33xx platform data
  *
- * Copyright (C) 2016-2017 Texas Instruments, Inc.
+ * Copyright (C) 2016-2018 Texas Instruments, Inc.
  *	Dave Gerlach <d-gerlach@ti.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #ifndef _LINUX_PLATFORM_DATA_PM33XX_H
@@ -60,12 +52,12 @@ struct am33xx_pm_platform_data {
 			       unsigned long args);
 	int	(*cpu_suspend)(int (*fn)(unsigned long), unsigned long args);
 	struct  am33xx_pm_sram_addr *(*get_sram_addrs)(void);
+	void __iomem *(*get_rtc_base_addr)(void);
 	void (*save_context)(void);
 	void (*restore_context)(void);
 	void (*prepare_rtc_suspend)(void);
 	void (*prepare_rtc_resume)(void);
 	int (*check_off_mode_enable)(void);
-	void __iomem *(*get_rtc_base_addr)(void);
 };
 
 struct am33xx_pm_sram_data {

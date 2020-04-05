@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * K3 NAVSS Descriptor pool helper library
+ * CPPI5 descriptors pool
  *
  * Copyright (C) 2018 Texas Instruments Incorporated - http://www.ti.com
  */
 
-#ifndef __SOC_TI_K3_NAVSS_DESC_POOL_H_
-#define __SOC_TI_K3_NAVSS_DESC_POOL_H_
+#ifndef K3_NAVSS_DESC_POOL_H_
+#define K3_NAVSS_DESC_POOL_H_
 
 struct k3_knav_desc_pool;
 
@@ -23,4 +23,4 @@ void *k3_knav_pool_alloc(struct k3_knav_desc_pool *pool);
 void k3_knav_pool_free(struct k3_knav_desc_pool *pool, void *addr);
 size_t k3_knav_pool_avail(struct k3_knav_desc_pool *pool);
 
-#endif /* __SOC_TI_K3_NAVSS_DESC_POOL_H_ */
+#endif /* K3_NAVSS_DESC_POOL_H_ */

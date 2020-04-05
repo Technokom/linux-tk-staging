@@ -265,17 +265,61 @@ static void emac_get_ethtool_stats(struct net_device *ndev,
 {
 	struct prueth_emac *emac = netdev_priv(ndev);
 	struct prueth *prueth = emac->prueth;
-	int i;
-	int slice = prueth_emac_slice(emac);
-	u32 base = stats_base[slice];
-	u32 val;
+	struct regmap *miig_rt;
+	int i, slice, icssg;
+	bool skip = false;
+	u32 base, val;
 
-	for (i = 0; i < ARRAY_SIZE(icssg_ethtool_stats); i++) {
-		regmap_read(prueth->miig_rt,
-			    base + icssg_ethtool_stats[i].offset,
-			    &val);
-		data[i] = val;
+	icssg = emac->ingress_icssg;
+	miig_rt = prueth->miig_rt[icssg];
+	slice = emac->ingress_slice;
+	base = stats_base[slice];
+	if (!prueth->dual_icssg) {
+		for (i = 0; i < ARRAY_SIZE(icssg_ethtool_stats); i++) {
+			regmap_read(miig_rt,
+				    base + icssg_ethtool_stats[i].offset,
+				    &val);
+			data[i] = val;
+		}
+	} else {
+		for (i = 0; i < ARRAY_SIZE(icssg_ethtool_stats); i++) {
+			if (!skip && icssg_ethtool_stats[i].offset >=
+			    offsetof(struct miig_stats_regs, tx_good_frames)) {
+				icssg = emac->egress_icssg;
+				slice = emac->egress_slice;
+				miig_rt = prueth->miig_rt[icssg];
+				base = stats_base[slice];
+				skip = true;
+			}
+			regmap_read(miig_rt,
+				    base + icssg_ethtool_stats[i].offset,
+				    &val);
+			data[i] = val;
+		}
 	}
+}
+
+static int emac_get_ts_info(struct net_device *ndev,
+			    struct ethtool_ts_info *info)
+{
+	struct prueth_emac *emac = netdev_priv(ndev);
+
+	if (emac->prueth->dual_icssg)
+		return -ENODEV;
+
+	info->so_timestamping =
+		SOF_TIMESTAMPING_TX_HARDWARE |
+		SOF_TIMESTAMPING_TX_SOFTWARE |
+		SOF_TIMESTAMPING_RX_HARDWARE |
+		SOF_TIMESTAMPING_RX_SOFTWARE |
+		SOF_TIMESTAMPING_SOFTWARE |
+		SOF_TIMESTAMPING_RAW_HARDWARE;
+
+	info->phc_index = ptp_clock_index(emac->iep.ptp_clock);
+	info->tx_types = BIT(HWTSTAMP_TX_OFF) | BIT(HWTSTAMP_TX_ON);
+	info->rx_filters = BIT(HWTSTAMP_FILTER_NONE) | BIT(HWTSTAMP_FILTER_ALL);
+
+	return 0;
 }
 
 const struct ethtool_ops icssg_ethtool_ops = {
@@ -285,6 +329,7 @@ const struct ethtool_ops icssg_ethtool_ops = {
 	.get_sset_count = emac_get_sset_count,
 	.get_strings = emac_get_strings,
 	.get_ethtool_stats = emac_get_ethtool_stats,
+	.get_ts_info = emac_get_ts_info,
 
 	.get_link_ksettings = emac_get_link_ksettings,
 	.set_link_ksettings = emac_set_link_ksettings,

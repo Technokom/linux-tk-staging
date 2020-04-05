@@ -243,42 +243,59 @@ static const struct snd_soc_dapm_route intercon[] =
 //--------------------------------------------------------------------------------------------
 static int lm49350_hw_params(struct snd_pcm_substream *substream, struct snd_pcm_hw_params *params, struct snd_soc_dai *dai)
 {
-	struct snd_soc_codec *codec = dai->codec;
 
+	//struct snd_soc_codec *codec = dai->codec;
+    struct snd_soc_component *component = dai->component;
     
 
 	switch (params_rate(params)) {
         case 8000:
-        	snd_soc_write(codec, DAC_CLOCK,23);
-            snd_soc_write(codec, ADC_CLOCK, 23);
+        	//snd_soc_write(codec, DAC_CLOCK,23);
+            //snd_soc_write(codec, ADC_CLOCK, 23);
+	        snd_soc_component_write(component, DAC_CLOCK, 23);
+    	    snd_soc_component_write(component, ADC_CLOCK, 23);
             break;
         case 11025:
-            snd_soc_write(codec, DAC_CLOCK, 17);//snd_soc_write(codec, DAC_CLOCK, 0x10);
-            snd_soc_write(codec, ADC_CLOCK, 17);//snd_soc_write(codec, ADC_CLOCK, 0x10);
+            //snd_soc_write(codec, DAC_CLOCK, 17);//snd_soc_write(codec, DAC_CLOCK, 0x10);
+            //snd_soc_write(codec, ADC_CLOCK, 17);//snd_soc_write(codec, ADC_CLOCK, 0x10);
+            snd_soc_component_write(component, DAC_CLOCK, 17);
+    	    snd_soc_component_write(component, ADC_CLOCK, 17);
             break;
         case 16000:
-            snd_soc_write(codec, DAC_CLOCK, 11);//snd_soc_write(codec, DAC_CLOCK, 0x0b);
-            snd_soc_write(codec, DAC_CLOCK, 11);//snd_soc_write(codec, ADC_CLOCK, 0x0b);
+            //snd_soc_write(codec, DAC_CLOCK, 11);//snd_soc_write(codec, DAC_CLOCK, 0x0b);
+            //snd_soc_write(codec, DAC_CLOCK, 11);//snd_soc_write(codec, ADC_CLOCK, 0x0b);
+            snd_soc_component_write(component, DAC_CLOCK, 11);
+    	    snd_soc_component_write(component, ADC_CLOCK, 11);
             break;
         case 22050:
-            snd_soc_write(codec, DAC_CLOCK, 7);
-            snd_soc_write(codec, ADC_CLOCK, 7);
+            //snd_soc_write(codec, DAC_CLOCK, 7);
+            //snd_soc_write(codec, ADC_CLOCK, 7);
+            snd_soc_component_write(component, DAC_CLOCK, 7);
+    	    snd_soc_component_write(component, ADC_CLOCK, 7);
             break;
         case 32000:
-            snd_soc_write(codec, DAC_CLOCK, 5);
-            snd_soc_write(codec, ADC_CLOCK, 5);
+            //snd_soc_write(codec, DAC_CLOCK, 5);
+            //snd_soc_write(codec, ADC_CLOCK, 5);
+            snd_soc_component_write(component, DAC_CLOCK, 5);
+    	    snd_soc_component_write(component, ADC_CLOCK, 5);
             break;
         case 44100:
-            snd_soc_write(codec, DAC_CLOCK, 4);
-            snd_soc_write(codec, ADC_CLOCK, 4);
+            //snd_soc_write(codec, DAC_CLOCK, 4);
+            //snd_soc_write(codec, ADC_CLOCK, 4);
+            snd_soc_component_write(component, DAC_CLOCK, 4);
+    	    snd_soc_component_write(component, ADC_CLOCK, 4);
             break;
         case 48000:
-            snd_soc_write(codec, DAC_CLOCK, 0x03);
-            snd_soc_write(codec, ADC_CLOCK, 0x03);
+            //snd_soc_write(codec, DAC_CLOCK, 0x03);
+            //snd_soc_write(codec, ADC_CLOCK, 0x03);
+            snd_soc_component_write(component, DAC_CLOCK, 3);
+    	    snd_soc_component_write(component, ADC_CLOCK, 3);
             break;
         case 96000:
-            snd_soc_write(codec, DAC_CLOCK, 0x01);
-            snd_soc_write(codec, ADC_CLOCK, 0x01);
+            //snd_soc_write(codec, DAC_CLOCK, 0x01);
+            //snd_soc_write(codec, ADC_CLOCK, 0x01);
+            snd_soc_component_write(component, DAC_CLOCK, 1);
+    	    snd_soc_component_write(component, ADC_CLOCK, 1);
             break;
         default:
             //snd_soc_write(codec, DAC_CLOCK, 0x01);
@@ -289,7 +306,8 @@ static int lm49350_hw_params(struct snd_pcm_substream *substream, struct snd_pcm
 }
 //--------------------------------------------------------------------------------------------
 struct lm49350_priv {
-	struct snd_soc_codec *codec;
+	//struct snd_soc_codec *codec;
+    struct snd_soc_component *component;
 	struct regmap *regmap;
 	unsigned int sysclk;
 	unsigned int dai_fmt;
@@ -338,82 +356,83 @@ static int lm49350_set_bias_level(struct snd_soc_codec *codec, enum snd_soc_bias
 	return 0;
 }
 //--------------------------------------------------------------------------------------------
-static int lm49350_init(struct snd_soc_codec *codec)
+static int lm49350_init(struct snd_soc_component *component)
 {
 	//struct lm49350_priv *lm49350 = snd_soc_codec_get_drvdata(codec);
 
-	snd_soc_write(codec, BASIC_SETUP_PMC_CLOCK, 0x00);
-    snd_soc_write(codec, PMC_SETUP, 0xA0);
+	snd_soc_component_write(component, BASIC_SETUP_PMC_CLOCK, 0x00);
+    snd_soc_component_write(component, PMC_SETUP, 0xA0);
 
 	
-	snd_soc_write(codec, PLL_CLK_SEL, 0x00);     // input clock to PLL2 - MCLK
-  	snd_soc_write(codec, PLL2_M, 9);        // PLL2_M = 5
-  	snd_soc_write(codec, PLL2_N, 32); // PLL2_N = 32
-  	snd_soc_write(codec, PLL2_N_MOD, 0x00);     // PLL2_N_MOD = 0
-  	snd_soc_write(codec, PLL2_P, 49);       // PLL2_P = 25
+	snd_soc_component_write(component, PLL_CLK_SEL, 0x00);     // input clock to PLL2 - MCLK
+  	snd_soc_component_write(component, PLL2_M, 9);        // PLL2_M = 5
+  	snd_soc_component_write(component, PLL2_N, 32); // PLL2_N = 32
+  	snd_soc_component_write(component, PLL2_N_MOD, 0x00);     // PLL2_N_MOD = 0
+  	snd_soc_component_write(component, PLL2_P, 49);       // PLL2_P = 25
     // Fout = 6144 kHz
 
-	snd_soc_write(codec, DAC_BASIC, 0x41);//DAC settings OSR 128, clock source PLL2
-  	snd_soc_write(codec, DAC_CLOCK, 5);//2048 KHz
+	snd_soc_component_write(component, DAC_BASIC, 0x41);//DAC settings OSR 128, clock source PLL2
+  	snd_soc_component_write(component, DAC_CLOCK, 5);//2048 KHz
 
-    snd_soc_write(codec, 0x20, 0x40);//snd_soc_write(codec, 0x20, 0x43);//ADC settings, stereo, OSR 128, clock source PLL2
-  	snd_soc_write(codec, 0x21, 5);   //2048 kHz
+    snd_soc_component_write(component, 0x20, 0x40);//snd_soc_write(codec, 0x20, 0x43);//ADC settings, stereo, OSR 128, clock source PLL2
+  	snd_soc_component_write(component, 0x21, 5);   //2048 kHz
 
-	snd_soc_write(codec, 0x42, 0x1);
-  	snd_soc_write(codec, 0x43, 0x05);
-    snd_soc_write(codec, 0x44, 0x11); //snd_soc_write(codec, 0x44, 0x09);
-  	snd_soc_write(codec, 0x45, 0x10);
+	snd_soc_component_write(component, 0x42, 0x1);
+  	snd_soc_component_write(component, 0x43, 0x05);
+    snd_soc_component_write(component, 0x44, 0x11); //snd_soc_write(codec, 0x44, 0x09);
+  	snd_soc_component_write(component, 0x45, 0x10);
 
-	snd_soc_write(codec, 0x50, 0x1F);//WriteAIC(0x50, 0x1B);
-	snd_soc_write(codec, 0x51, 5);
+	snd_soc_component_write(component, 0x50, 0x1F);//WriteAIC(0x50, 0x1B);
+	snd_soc_component_write(component, 0x51, 5);
 	//snd_soc_write(codec, 0x51, 25);
-	snd_soc_write(codec, 0x52, 0x0A);
-	snd_soc_write(codec, 0x53, 0x02);
-	snd_soc_write(codec, 0x54, 0x1B);
-	snd_soc_write(codec, 0x55, 0x02);
-	snd_soc_write(codec, 0x56, 0x02);
+	snd_soc_component_write(component, 0x52, 0x0A);
+	snd_soc_component_write(component, 0x53, 0x02);
+	snd_soc_component_write(component, 0x54, 0x1B);
+	snd_soc_component_write(component, 0x55, 0x02);
+	snd_soc_component_write(component, 0x56, 0x02);
 
-	snd_soc_write(codec, 0x60, 0x3e);   // audio port 2 rsv and trmt mono data, RX & TX enable, audio port will transmit the clock, audio port will transmit the sync signal, PCM
-    snd_soc_write(codec, 0x61, 47);   //snd_soc_write(codec, 0x61, 63);     // master clocks in the audio port Divides By 8 ,  DAC_SOURCE_CLK ==>   384 kHz
-	snd_soc_write(codec, 0x62, 0x00);   // SYNTH_DENOM (1/1), Denominator = 128 ==> devider 128
-    snd_soc_write(codec, 0x63, 0x07); //snd_soc_write(codec, 0x63, 0x05);   // Number of Clock Cycles = 24 in mono mode, sync len 1 bit
-	snd_soc_write(codec, 0x64, 0x9b);   // TX len = 16 bit, RX len = 16 bit, TX data output padding - High-Z
-	snd_soc_write(codec, 0x65, 0x02);   // RX_MODE - 1(I2S/PCM Short), MSB Justified
-	snd_soc_write(codec, 0x66, 0x02);   // TX_MODE - 1(I2S/PCM Short), MSB Justified
+	snd_soc_component_write(component, 0x60, 0x3e);   // audio port 2 rsv and trmt mono data, RX & TX enable, audio port will transmit the clock, audio port will transmit the sync signal, PCM
+    snd_soc_component_write(component, 0x61, 47);   //snd_soc_write(codec, 0x61, 63);     // master clocks in the audio port Divides By 8 ,  DAC_SOURCE_CLK ==>   384 kHz
+	snd_soc_component_write(component, 0x62, 0x00);   // SYNTH_DENOM (1/1), Denominator = 128 ==> devider 128
+    snd_soc_component_write(component, 0x63, 0x07); //snd_soc_write(codec, 0x63, 0x05);   // Number of Clock Cycles = 24 in mono mode, sync len 1 bit
+	snd_soc_component_write(component, 0x64, 0x9b);   // TX len = 16 bit, RX len = 16 bit, TX data output padding - High-Z
+	snd_soc_component_write(component, 0x65, 0x02);   // RX_MODE - 1(I2S/PCM Short), MSB Justified
+	snd_soc_component_write(component, 0x66, 0x02);   // TX_MODE - 1(I2S/PCM Short), MSB Justified
 
-	snd_soc_write(codec, ANALOG_MIXER_CLASSD, 0x00);
+	snd_soc_component_write(component, ANALOG_MIXER_CLASSD, 0x00);
 
-	snd_soc_write(codec, 0x11, 0x00);
-	snd_soc_write(codec, 0x12, 0x00);
+	snd_soc_component_write(component, 0x11, 0x00);
+	snd_soc_component_write(component, 0x12, 0x00);
 
-	snd_soc_write(codec, 0xA8, 0x20);
-	snd_soc_write(codec, 0xA9, 0x20);
+	snd_soc_component_write(component, 0xA8, 0x20);
+	snd_soc_component_write(component, 0xA9, 0x20);
 
-	snd_soc_write(codec, 0x18, 0x27);
-	snd_soc_write(codec, 0x19, 0xA7);
+	snd_soc_component_write(component, 0x18, 0x27);
+	snd_soc_component_write(component, 0x19, 0xA7);
 
-	snd_soc_write(codec, 0x15, 0x00);
+	snd_soc_component_write(component, 0x15, 0x00);
 
 
-    snd_soc_write(codec, ANALOG_MIXER_MIC_L_LVL, 0x00);
-    snd_soc_write(codec, ANALOG_MIXER_MIC_R_LVL, 0x00);
+    snd_soc_component_write(component, ANALOG_MIXER_MIC_L_LVL, 0x00);
+    snd_soc_component_write(component, ANALOG_MIXER_MIC_R_LVL, 0x00);
 
-	snd_soc_write(codec, BASIC_SETUP_PMC_SETUP, 0x15);//PLL2 Enb
+	snd_soc_component_write(component, BASIC_SETUP_PMC_SETUP, 0x15);//PLL2 Enb
 
 	return 0;
 	
 }
 //--------------------------------------------------------------------------------------------
-static int lm49350_probe(struct snd_soc_codec *codec)
+static int lm49350_probe(struct snd_soc_component *component)
 {
-	struct lm49350_priv *lm49350 = snd_soc_codec_get_drvdata(codec);
+	//struct lm49350_priv *lm49350 = snd_soc_codec_get_drvdata(codec);
+    struct lm49350_priv *lm49350 = snd_soc_component_get_drvdata(component);
     //struct snd_soc_dapm_context *dapm;
 	
 	INIT_LIST_HEAD(&lm49350->list);
-	lm49350->codec = codec;
+	lm49350->component = component;
 
 	regcache_mark_dirty(lm49350->regmap);
-	lm49350_init(codec);
+	lm49350_init(component);
 
  	//dapm = snd_soc_codec_get_dapm(codec);
     //snd_soc_dapm_new_controls(dapm, lm49350_dapm_widgets_output, ARRAY_SIZE(lm49350_dapm_widgets_output));
@@ -421,23 +440,21 @@ static int lm49350_probe(struct snd_soc_codec *codec)
 	return 0;
 }
 //--------------------------------------------------------------------------------------------
-static int lm49350_remove(struct snd_soc_codec *codec)
+static void lm49350_remove(struct snd_soc_component *component)
 {
 	return 0;
 }
 //--------------------------------------------------------------------------------------------
-static struct snd_soc_codec_driver soc_codec_dev_lm49350 = 
+static struct snd_soc_component_driver soc_component_dev_lm49350 = 
 {
-	.set_bias_level = lm49350_set_bias_level,	
-	.idle_bias_off = true,
 	.probe = lm49350_probe,
 	.remove = lm49350_remove,
-    .component_driver.controls = lm49350_snd_controls,
-	.component_driver.num_controls = ARRAY_SIZE(lm49350_snd_controls),
-	.component_driver.dapm_widgets = lm49350_dapm_widgets,
-	.component_driver.num_dapm_widgets = ARRAY_SIZE(lm49350_dapm_widgets),
-	.component_driver.dapm_routes = intercon,
-	.component_driver.num_dapm_routes = ARRAY_SIZE(intercon),
+    .controls = lm49350_snd_controls,
+	.num_controls = ARRAY_SIZE(lm49350_snd_controls),
+	.dapm_widgets = lm49350_dapm_widgets,
+	.num_dapm_widgets = ARRAY_SIZE(lm49350_dapm_widgets),
+	.dapm_routes = intercon,
+	.num_dapm_routes = ARRAY_SIZE(intercon),
 };
 //--------------------------------------------------------------------------------------------
 static int lm49350_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
@@ -466,9 +483,9 @@ static int lm49350_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id 
 //	regcache_cache_only(lm49350->regmap, true);
 	regcache_cache_only(lm49350->regmap, false);
 	regcache_sync(lm49350->regmap);
-	i2c_set_clientdata(i2c, lm49350);
+	i2c_set_clientdata(i2c, lm49350);   
 
-	ret = snd_soc_register_codec(&i2c->dev, &soc_codec_dev_lm49350, &lm49350_dai, 1);
+	ret = devm_snd_soc_register_component(&i2c->dev, &soc_component_dev_lm49350, &lm49350_dai, 1);
 	if(ret != 0) {
 		return ret;
 	}
@@ -480,7 +497,7 @@ static int lm49350_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id 
 static int lm49350_i2c_remove(struct i2c_client *client)
 {
 
-	snd_soc_unregister_codec(&client->dev);
+	snd_soc_unregister_component(&client->dev);
 
 	return 0;
 }

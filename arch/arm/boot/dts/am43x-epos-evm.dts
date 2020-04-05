@@ -45,7 +45,7 @@
 	};
 
 	lcd0: display {
-		compatible = "osddisplays,osd057T0559-34ts", "panel-dpi";
+		compatible = "osddisplays,osd070t1718-19ts", "panel-dpi";
 		label = "lcd";
 
 		backlight = <&lcd_bl>;
@@ -600,7 +600,7 @@
 	tps65218: tps65218@24 {
 		reg = <0x24>;
 		compatible = "ti,tps65218";
-		interrupts = <GIC_SPI 7 IRQ_TYPE_NONE>; /* NMIn */
+		interrupts = <GIC_SPI 7 IRQ_TYPE_LEVEL_HIGH>; /* NMIn */
 		interrupt-controller;
 		#interrupt-cells = <2>;
 
@@ -1007,17 +1007,17 @@
 	rx-num-evt = <32>;
 };
 
-&synctimer_32kclk {
+&mux_synctimer32k_ck {
 	assigned-clocks = <&mux_synctimer32k_ck>;
 	assigned-clock-parents = <&clkdiv32k_ick>;
 };
 
-&wkup_m3_ipc {
-	ti,scale-data-fw = "am43x-evm-scale-data.bin";
-};
-
 &cpu {
 	cpu0-supply = <&dcdc2>;
+};
+
+&wkup_m3_ipc {
+	ti,scale-data-fw = "am43x-evm-scale-data.bin";
 };
 
 &sgx {

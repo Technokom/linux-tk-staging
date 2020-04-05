@@ -1,31 +1,23 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * AM33XX Arch Power Management Routines
  *
- * Copyright (C) 2016-2017 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2016-2018 Texas Instruments Incorporated - http://www.ti.com/
  *	Dave Gerlach
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation version 2.
- *
- * This program is distributed "as is" WITHOUT ANY WARRANTY of any
- * kind, whether express or implied; without even the implied warranty
- * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
-#include <linux/clk.h>
-#include <linux/platform_data/gpio-omap.h>
-#include <linux/pinctrl/pinmux.h>
-#include <linux/wkup_m3_ipc.h>
-#include <linux/of.h>
-#include <linux/rtc.h>
 #include <linux/cpuidle.h>
 #include <linux/platform_data/pm33xx.h>
 #include <asm/cpuidle.h>
 #include <asm/smp_scu.h>
 #include <asm/suspend.h>
 #include <linux/errno.h>
+#include <linux/clk.h>
+#include <linux/platform_data/gpio-omap.h>
+#include <linux/pinctrl/pinmux.h>
+#include <linux/wkup_m3_ipc.h>
+#include <linux/of.h>
+#include <linux/rtc.h>
 
 #include "cm33xx.h"
 #include "common.h"
@@ -35,7 +27,6 @@
 #include "omap_hwmod.h"
 #include "pm.h"
 #include "powerdomain.h"
-#include "prm.h"
 #include "prm33xx.h"
 #include "soc.h"
 #include "sram.h"
@@ -45,8 +36,6 @@ static struct powerdomain *cefuse_pwrdm, *gfx_pwrdm, *per_pwrdm, *mpu_pwrdm;
 static struct clockdomain *gfx_l4ls_clkdm;
 static void __iomem *scu_base;
 static struct omap_hwmod *rtc_oh;
-
-static struct pinctrl_dev *pmx_dev;
 
 static int (*idle_fn)(u32 wfi_flags);
 
@@ -102,10 +91,12 @@ static int amx3_common_init(int (*idle)(u32 wfi_flags))
 
 	/* CEFUSE domain can be turned off post bootup */
 	cefuse_pwrdm = pwrdm_lookup("cefuse_pwrdm");
-	if (cefuse_pwrdm)
-		omap_set_pwrdm_state(cefuse_pwrdm, PWRDM_POWER_OFF);
-	else
+	if (!cefuse_pwrdm)
 		pr_err("PM: Failed to get cefuse_pwrdm\n");
+	else if (omap_type() != OMAP2_DEVICE_TYPE_GP)
+		pr_info("PM: Leaving EFUSE power domain active\n");
+	else
+		omap_set_pwrdm_state(cefuse_pwrdm, PWRDM_POWER_OFF);
 
 	idle_fn = idle;
 
@@ -131,8 +122,6 @@ static int am33xx_suspend_init(int (*idle)(u32 wfi_flags))
 static int am43xx_suspend_init(int (*idle)(u32 wfi_flags))
 {
 	int ret = 0;
-
-	pmx_dev = get_pinctrl_dev_from_devname("44e10800.pinmux");
 
 	ret = am43xx_map_scu();
 	if (ret) {
@@ -255,53 +244,29 @@ static struct am33xx_pm_sram_addr *amx3_get_sram_addrs(void)
 		return NULL;
 }
 
-static void common_save_context(void)
+void __iomem *am43xx_get_rtc_base_addr(void)
 {
-	omap2_gpio_prepare_for_idle(0);
-	pinmux_save_context(pmx_dev, "am33xx_pmx_per");
-	clks_save_context();
-	pwrdms_save_context();
-	omap_hwmods_save_context();
-	clkdm_save_context();
-}
+	rtc_oh = omap_hwmod_lookup("rtc");
 
-static void common_restore_context(void)
-{
-	clks_restore_context();
-	clkdm_restore_context();
-	pwrdms_restore_context();
-	omap_hwmods_restore_context();
-	pinmux_restore_context(pmx_dev, "am33xx_pmx_per");
-	pwrdms_lost_power();
-	omap2_gpio_resume_after_idle();
-}
-
-static void am33xx_save_context(void)
-{
-	common_save_context();
-	omap_intc_save_context();
-	am33xx_control_save_context();
-}
-
-static void am33xx_restore_context(void)
-{
-	common_restore_context();
-	am33xx_control_restore_context();
-	omap_intc_restore_context();
+	return omap_hwmod_get_mpu_rt_va(rtc_oh);
 }
 
 static void am43xx_save_context(void)
 {
-	common_save_context();
-	am43xx_control_save_context();
-	am43xx_prm_save_context();
+}
+
+static void am33xx_save_context(void)
+{
+	omap_intc_save_context();
+}
+
+static void am33xx_restore_context(void)
+{
+	omap_intc_restore_context();
 }
 
 static void am43xx_restore_context(void)
 {
-	common_restore_context();
-	am43xx_control_restore_context();
-	am43xx_prm_restore_context();
 	/*
 	 * HACK: restore dpll_per_clkdcoldo register contents, to avoid
 	 * breaking suspend-resume
@@ -317,13 +282,6 @@ static void am43xx_prepare_rtc_suspend(void)
 static void am43xx_prepare_rtc_resume(void)
 {
 	omap_hwmod_idle(rtc_oh);
-}
-
-void __iomem *am43xx_get_rtc_base_addr(void)
-{
-	rtc_oh = omap_hwmod_lookup("rtc");
-
-	return omap_hwmod_get_mpu_rt_va(rtc_oh);
 }
 
 static struct am33xx_pm_platform_data am33xx_ops = {
@@ -364,7 +322,7 @@ static struct am33xx_pm_platform_data *am33xx_pm_get_pdata(void)
 		return NULL;
 }
 
-void __init amx3_common_pm_init(void)
+int __init amx3_common_pm_init(void)
 {
 	struct am33xx_pm_platform_data *pdata;
 	struct platform_device_info devinfo;
@@ -377,6 +335,8 @@ void __init amx3_common_pm_init(void)
 	devinfo.size_data = sizeof(*pdata);
 	devinfo.id = -1;
 	platform_device_register_full(&devinfo);
+
+	return 0;
 }
 
 static int __init amx3_idle_init(struct device_node *cpu_node, int cpu)

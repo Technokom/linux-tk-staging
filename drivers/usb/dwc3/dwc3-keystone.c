@@ -1,18 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0
 /**
  * dwc3-keystone.c - Keystone Specific Glue layer
  *
  * Copyright (C) 2010-2013 Texas Instruments Incorporated - http://www.ti.com
  *
  * Author: WingMan Kwok <w-kwok2@ti.com>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2  of
- * the License as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/module.h>
@@ -114,6 +106,10 @@ static int kdwc3_probe(struct platform_device *pdev)
 		goto err_irq;
 	}
 
+	/* IRQ processing not required currently for AM65 */
+	if (of_device_is_compatible(node, "ti,am654-dwc3"))
+		goto skip_irq;
+
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {
 		dev_err(&pdev->dev, "missing irq\n");
@@ -131,6 +127,7 @@ static int kdwc3_probe(struct platform_device *pdev)
 
 	kdwc3_enable_irqs(kdwc);
 
+skip_irq:
 	error = of_platform_populate(node, NULL, NULL, dev);
 	if (error) {
 		dev_err(&pdev->dev, "failed to create dwc3 core\n");
@@ -160,8 +157,11 @@ static int kdwc3_remove_core(struct device *dev, void *c)
 static int kdwc3_remove(struct platform_device *pdev)
 {
 	struct dwc3_keystone *kdwc = platform_get_drvdata(pdev);
+	struct device_node *node = pdev->dev.of_node;
 
-	kdwc3_disable_irqs(kdwc);
+	if (!of_device_is_compatible(node, "ti,am654-dwc3"))
+		kdwc3_disable_irqs(kdwc);
+
 	device_for_each_child(&pdev->dev, NULL, kdwc3_remove_core);
 	pm_runtime_put_sync(kdwc->dev);
 	pm_runtime_disable(kdwc->dev);
@@ -173,6 +173,7 @@ static int kdwc3_remove(struct platform_device *pdev)
 
 static const struct of_device_id kdwc3_of_match[] = {
 	{ .compatible = "ti,keystone-dwc3", },
+	{ .compatible = "ti,am654-dwc3" },
 	{},
 };
 MODULE_DEVICE_TABLE(of, kdwc3_of_match);

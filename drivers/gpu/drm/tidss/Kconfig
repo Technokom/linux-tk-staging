@@ -7,7 +7,11 @@ config DRM_TIDSS
 	select DRM_GEM_CMA_HELPER
 	select VIDEOMODE_HELPERS
 	help
-	  TI Keystone
+	  The TI Keystone family SoCs introduced a new generation of
+	  Display SubSystem. They are called DSS6 and DSS7 and at the
+	  time of writing this these DSSs are found on 66AK2Gx and
+	  AM6x SoCs. Set this to Y or M to add display support for
+	  TI Keystone family platforms.
 
 if DRM_TIDSS
 

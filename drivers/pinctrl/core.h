@@ -154,7 +154,7 @@ struct pinctrl_setting {
  *	or pin, and each of these will increment the @usecount.
  * @mux_owner: The name of device that called pinctrl_get().
  * @mux_setting: The most recent selected mux setting for this pin, if any.
- * @gpio_owner: If pinctrl_request_gpio() was called for this pin, this is
+ * @gpio_owner: If pinctrl_gpio_request() was called for this pin, this is
  *	the name of the GPIO that "owns" this pin.
  */
 struct pin_desc {
@@ -218,14 +218,9 @@ int pinctrl_generic_add_group(struct pinctrl_dev *pctldev, const char *name,
 int pinctrl_generic_remove_group(struct pinctrl_dev *pctldev,
 				 unsigned int group_selector);
 
-static inline int
-pinctrl_generic_remove_last_group(struct pinctrl_dev *pctldev)
-{
-	return pinctrl_generic_remove_group(pctldev, pctldev->num_groups - 1);
-}
-
 #endif	/* CONFIG_GENERIC_PINCTRL_GROUPS */
 
+struct pinctrl_dev *get_pinctrl_dev_from_devname(const char *dev_name);
 struct pinctrl_dev *get_pinctrl_dev_from_of_node(struct device_node *np);
 int pin_get_from_name(struct pinctrl_dev *pctldev, const char *name);
 const char *pin_get_name(struct pinctrl_dev *pctldev, const unsigned pin);

@@ -2,15 +2,13 @@
 /**
  * PRU-ICSS Subsystem user interfaces
  *
- * Copyright (C) 2015-2018 Texas Instruments Incorporated - http://www.ti.com
+ * Copyright (C) 2015-2019 Texas Instruments Incorporated - http://www.ti.com
  *	Suman Anna <s-anna@ti.com>
  *	Tero Kristo <t-kristo@ti.com>
  */
 
 #ifndef __LINUX_PRUSS_H
 #define __LINUX_PRUSS_H
-
-#include <linux/remoteproc.h>
 
 /*
  * PRU_ICSS_CFG registers
@@ -107,15 +105,6 @@ enum pruss_gpi_mode {
 };
 
 /**
- * enum pruss_syscon - PRUSS sub-module syscon identifiers
- */
-enum pruss_syscon {
-	PRUSS_SYSCON_CFG = 0,
-	PRUSS_SYSCON_MII_RT,
-	PRUSS_SYSCON_MAX,
-};
-
-/**
  * enum pruss_pru_id - PRU core identifiers
  */
 enum pruss_pru_id {
@@ -162,27 +151,21 @@ struct pruss_mem_region {
 	size_t size;
 };
 
+struct rproc;
 struct pruss;
 
-#if IS_ENABLED(CONFIG_PRUSS_REMOTEPROC)
+#if IS_ENABLED(CONFIG_TI_PRUSS)
 
 struct pruss *pruss_get(struct rproc *rproc, int *pruss_id);
 void pruss_put(struct pruss *pruss);
-int pruss_regmap_read(struct pruss *pruss, enum pruss_syscon mod,
-		      unsigned int reg, unsigned int *val);
-int pruss_regmap_update(struct pruss *pruss, enum pruss_syscon mod,
-			unsigned int reg, unsigned int mask, unsigned int val);
 int pruss_request_mem_region(struct pruss *pruss, enum pruss_mem mem_id,
 			     struct pruss_mem_region *region);
 int pruss_release_mem_region(struct pruss *pruss,
 			     struct pruss_mem_region *region);
-
+int pruss_cfg_read(struct pruss *pruss, unsigned int reg, unsigned int *val);
+int pruss_cfg_update(struct pruss *pruss, unsigned int reg,
+		     unsigned int mask, unsigned int val);
 int pruss_intc_trigger(unsigned int irq);
-
-struct rproc *pru_rproc_get(struct device_node *node, int index);
-void pru_rproc_put(struct rproc *rproc);
-enum pruss_pru_id pru_rproc_get_id(struct rproc *rproc);
-int pru_rproc_set_ctable(struct rproc *rproc, enum pru_ctable_idx c, u32 addr);
 
 #else
 
@@ -192,19 +175,6 @@ static inline struct pruss *pruss_get(struct rproc *rproc, int *pruss_id)
 }
 
 static inline void pruss_put(struct pruss *pruss) { }
-
-static inline int pruss_regmap_read(struct pruss *pruss, enum pruss_syscon mod,
-				    unsigned int reg, unsigned int *val)
-{
-	return -ENOTSUPP;
-}
-
-static inline int pruss_regmap_update(struct pruss *pruss,
-				      enum pruss_syscon mod, unsigned int reg,
-				      unsigned int mask, unsigned int val)
-{
-	return -ENOTSUPP;
-}
 
 static inline int pruss_request_mem_region(struct pruss *pruss,
 					   enum pruss_mem mem_id,
@@ -219,10 +189,33 @@ static inline int pruss_release_mem_region(struct pruss *pruss,
 	return -ENOTSUPP;
 }
 
+static inline int pruss_cfg_read(struct pruss *pruss, unsigned int reg,
+				 unsigned int *val)
+{
+	return -ENOTSUPP;
+}
+
+static inline int pruss_cfg_update(struct pruss *pruss, unsigned int reg,
+				   unsigned int mask, unsigned int val)
+{
+	return -ENOTSUPP;
+}
+
 static inline int pruss_intc_trigger(unsigned int irq)
 {
 	return -ENOTSUPP;
 }
+
+#endif /* CONFIG_TI_PRUSS */
+
+#if IS_ENABLED(CONFIG_PRU_REMOTEPROC)
+
+struct rproc *pru_rproc_get(struct device_node *node, int index);
+void pru_rproc_put(struct rproc *rproc);
+enum pruss_pru_id pru_rproc_get_id(struct rproc *rproc);
+int pru_rproc_set_ctable(struct rproc *rproc, enum pru_ctable_idx c, u32 addr);
+
+#else
 
 static inline struct rproc *pru_rproc_get(struct device_node *node, int index)
 {
@@ -242,7 +235,7 @@ static inline int pru_rproc_set_ctable(struct rproc *rproc,
 	return -ENOTSUPP;
 }
 
-#endif /* CONFIG_PRUSS_REMOTEPROC */
+#endif /* CONFIG_PRU_REMOTEPROC */
 
 /**
  * pruss_cfg_gpimode() - set the GPI mode of the PRU
@@ -263,9 +256,9 @@ static inline int pruss_cfg_gpimode(struct pruss *pruss, struct rproc *pru,
 	if (id < 0)
 		return -EINVAL;
 
-	return pruss_regmap_update(pruss, PRUSS_SYSCON_CFG, PRUSS_CFG_GPCFG(id),
-				   PRUSS_GPCFG_PRU_GPI_MODE_MASK,
-				   mode << PRUSS_GPCFG_PRU_GPI_MODE_SHIFT);
+	return pruss_cfg_update(pruss, PRUSS_CFG_GPCFG(id),
+				PRUSS_GPCFG_PRU_GPI_MODE_MASK,
+				mode << PRUSS_GPCFG_PRU_GPI_MODE_SHIFT);
 }
 
 /**
@@ -279,8 +272,8 @@ static inline int pruss_cfg_miirt_enable(struct pruss *pruss, bool enable)
 {
 	u32 set = enable ? PRUSS_MII_RT_EVENT_EN : 0;
 
-	return pruss_regmap_update(pruss, PRUSS_SYSCON_CFG, PRUSS_CFG_MII_RT,
-				   PRUSS_MII_RT_EVENT_EN, set);
+	return pruss_cfg_update(pruss, PRUSS_CFG_MII_RT,
+				PRUSS_MII_RT_EVENT_EN, set);
 }
 
 /**
@@ -292,8 +285,8 @@ static inline int pruss_cfg_xfr_enable(struct pruss *pruss, bool enable)
 {
 	u32 set = enable ? PRUSS_SPP_XFER_SHIFT_EN : 0;
 
-	return pruss_regmap_update(pruss, PRUSS_SYSCON_CFG, PRUSS_CFG_SPP,
-				   PRUSS_SPP_XFER_SHIFT_EN, set);
+	return pruss_cfg_update(pruss, PRUSS_CFG_SPP,
+				PRUSS_SPP_XFER_SHIFT_EN, set);
 }
 
 #endif /* __LINUX_PRUSS_H */

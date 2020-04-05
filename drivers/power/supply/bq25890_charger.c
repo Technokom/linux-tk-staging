@@ -22,9 +22,9 @@
 #include <linux/types.h>
 #include <linux/gpio/consumer.h>
 #include <linux/interrupt.h>
-#include <linux/pm_runtime.h>
 #include <linux/delay.h>
 #include <linux/usb/phy.h>
+#include <linux/pm_runtime.h>
 
 #include <linux/acpi.h>
 #include <linux/of.h>
@@ -106,7 +106,7 @@ struct bq25890_device {
 	struct bq25890_state state;
 
 	struct mutex lock; /* protect state data */
-	bool is_pmic_controller;
+    bool is_pmic_controller;
 };
 
 static const struct regmap_range bq25890_readonly_reg_ranges[] = {

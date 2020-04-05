@@ -331,10 +331,8 @@ static struct clk *_register_divider(struct device *dev, const char *name,
 
 	/* allocate the divider */
 	div = kzalloc(sizeof(*div), GFP_KERNEL);
-	if (!div) {
-		pr_err("%s: could not allocate divider clk\n", __func__);
+	if (!div)
 		return ERR_PTR(-ENOMEM);
-	}
 
 	init.name = name;
 	init.ops = &ti_clk_divider_ops;
@@ -404,9 +402,11 @@ int ti_clk_parse_divider_data(int *div_table, int num_dividers, int max_div,
 
 	num_dividers = i;
 
-	tmp = kzalloc(sizeof(*tmp) * (valid_div + 1), GFP_KERNEL);
-	if (!tmp)
+	tmp = kcalloc(valid_div + 1, sizeof(*tmp), GFP_KERNEL);
+	if (!tmp) {
+		*table = ERR_PTR(-ENOMEM);
 		return -ENOMEM;
+	}
 
 	valid_div = 0;
 	*width = 0;
@@ -441,6 +441,7 @@ struct clk_hw *ti_clk_build_component_div(struct ti_clk_divider *setup)
 {
 	struct clk_omap_divider *div;
 	struct clk_omap_reg *reg;
+	int ret;
 
 	if (!setup)
 		return NULL;
@@ -460,6 +461,12 @@ struct clk_hw *ti_clk_build_component_div(struct ti_clk_divider *setup)
 		div->flags |= CLK_DIVIDER_POWER_OF_TWO;
 
 	div->table = _get_div_table_from_setup(setup, &div->width);
+	if (IS_ERR(div->table)) {
+		ret = PTR_ERR(div->table);
+		kfree(div);
+		return ERR_PTR(ret);
+	}
+
 
 	div->shift = setup->bit_shift;
 	div->latch = -EINVAL;
@@ -534,7 +541,7 @@ __init ti_clk_get_div_table(struct device_node *node)
 		return ERR_PTR(-EINVAL);
 	}
 
-	table = kzalloc(sizeof(*table) * (valid_div + 1), GFP_KERNEL);
+	table = kcalloc(valid_div + 1, sizeof(*table), GFP_KERNEL);
 
 	if (!table)
 		return ERR_PTR(-ENOMEM);

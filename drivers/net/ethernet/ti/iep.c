@@ -1,17 +1,10 @@
-/*
- * PRU IEP Driver
+// SPDX-License-Identifier: GPL-2.0
+/* PRU IEP Driver
  *
  * Copyright (C) 2017 Texas Instruments Incorporated - http://www.ti.com
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
+#include <linux/pinctrl/pinctrl.h>
+
 #include "icss_time_sync.h"
 #include "iep.h"
 #include "ptp_bc.h"
@@ -278,7 +271,6 @@ static inline u64 iep_get_count64(struct iep *iep)
 	u64 v = 0;
 
 	memcpy_fromio(&v, iep->iep_reg + iep->reg_ofs.count_reg, 8);
-
 	return v;
 }
 
@@ -807,10 +799,11 @@ static long iep_overflow_check(struct ptp_clock_info *ptp)
 
 	/* load the next pulse */
 
-	/* Do we need to get the updated time and counter again?
-	 * Probably not. Just use the last one. ns to sec boundary
-	 * will be larger to compensate.
+	/* Get the updated time and counter again because the previous
+	 * read might occur right before the PPS match time.
+
 	 */
+	ts = ns_to_timespec64(timecounter_read(&iep->tc));
 
 	/* Align cmp count to next sec boundary. If overflow check is
 	 * done every 50ms, the ns_to_sec  will be at least 950ms,
@@ -910,6 +903,7 @@ int iep_rx_timestamp(struct iep *iep, u16 ts_ofs, struct sk_buff *skb)
 	ssh = skb_hwtstamps(skb);
 	memset(ssh, 0, sizeof(*ssh));
 	ssh->hwtstamp = ns_to_ktime(ns);
+
 	return 0;
 }
 
@@ -934,6 +928,7 @@ int iep_tx_timestamp(struct iep *iep, u16 ts_ofs, struct sk_buff *skb,
 	memset(&ssh, 0, sizeof(ssh));
 	ssh.hwtstamp = ns_to_ktime(ns);
 	skb_tstamp_tx(skb, &ssh);
+
 	return 0;
 }
 
@@ -1096,11 +1091,14 @@ int iep_register(struct iep *iep)
 	ptp_schedule_worker(iep->ptp_clock, iep->ov_check_period);
 
 	if (iep->bc_pps_sync)
-		iep->bc_clkid = ptp_bc_clock_register(
-		(iep->pruss_id == 1) ? PTP_BC_CLOCK_TYPE_PRUICSS1 :
-				       PTP_BC_CLOCK_TYPE_PRUICSS2);
+		iep->bc_clkid = ptp_bc_clock_register((iep->pruss_id == 1) ?
+					PTP_BC_CLOCK_TYPE_PRUICSS1 :
+					PTP_BC_CLOCK_TYPE_PRUICSS2);
 
 	pr_info("iep ptp bc clkid %d\n", iep->bc_clkid);
+	/* HACK: call the unused ptp_bc API to avoid compiler warning
+	 */
+	ptp_bc_mux_ctrl_register(NULL, NULL, NULL);
 	return 0;
 }
 
@@ -1133,7 +1131,7 @@ static int iep_get_pps_extts_pins(struct iep *iep)
 	pins = devm_pinctrl_get(iep->dev);
 	if (IS_ERR(pins)) {
 		iep->pins = NULL;
-		dev_err(iep->dev, "request for sync latch pins failed: %ld\n",
+		dev_dbg(iep->dev, "request for sync latch pins failed: %ld\n",
 			PTR_ERR(pins));
 		return PTR_ERR(pins);
 	}
@@ -1226,6 +1224,7 @@ struct iep *iep_create(struct device *dev, void __iomem *sram,
 		iep->cc.mult = IEP_TC_INCR5_MULT;
 	else
 		iep->cc.mult = IEP_TC_INCR1_MULT;
+
 	iep->cc.read = iep_cc_read;
 	iep->cc.mask = CLOCKSOURCE_MASK(64);
 	iep->info = iep_info;

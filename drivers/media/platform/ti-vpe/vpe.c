@@ -940,7 +940,7 @@ static int set_srcdst_params(struct vpe_ctx *ctx)
  * mem2mem callbacks
  */
 
-/**
+/*
  * job_ready() - check whether an instance is ready to be scheduled to run
  */
 static int job_ready(void *priv)
@@ -965,23 +965,6 @@ static void job_abort(void *priv)
 
 	/* Will cancel the transaction in the next interrupt handler */
 	ctx->aborting = 1;
-}
-
-/*
- * Lock access to the device
- */
-static void vpe_lock(void *priv)
-{
-	struct vpe_ctx *ctx = priv;
-	struct vpe_dev *dev = ctx->dev;
-	mutex_lock(&dev->dev_mutex);
-}
-
-static void vpe_unlock(void *priv)
-{
-	struct vpe_ctx *ctx = priv;
-	struct vpe_dev *dev = ctx->dev;
-	mutex_unlock(&dev->dev_mutex);
 }
 
 static void vpe_dump_regs(struct vpe_dev *dev)
@@ -1065,7 +1048,7 @@ static void add_out_dtd(struct vpe_ctx *ctx, int port)
 		dma_addr = ctx->mv_buf_dma[mv_buf_selector];
 		q_data = &ctx->q_data[Q_DATA_SRC];
 		stride = ALIGN((q_data->width * vpdma_fmt->depth) >> 3,
-				VPDMA_STRIDE_ALIGN);
+			       VPDMA_STRIDE_ALIGN);
 	} else {
 		/* to incorporate interleaved formats */
 		int plane = fmt->coplanar ? p_data->vb_part : 0;
@@ -1129,7 +1112,7 @@ static void add_in_dtd(struct vpe_ctx *ctx, int port)
 		vpdma_fmt = &vpdma_misc_fmts[VPDMA_DATA_FMT_MV];
 		dma_addr = ctx->mv_buf_dma[mv_buf_selector];
 		stride = ALIGN((q_data->width * vpdma_fmt->depth) >> 3,
-				VPDMA_STRIDE_ALIGN);
+			       VPDMA_STRIDE_ALIGN);
 	} else {
 		/* to incorporate interleaved formats */
 		int plane = fmt->coplanar ? p_data->vb_part : 0;
@@ -1165,7 +1148,7 @@ static void add_in_dtd(struct vpe_ctx *ctx, int port)
 		 * of TBT or BTB
 		 */
 		if (q_data->flags & Q_DATA_INTERLACED_SEQ_TB ||
-		    q_data->flags & Q_DATA_INTERLACED_SEQ_TB) {
+		    q_data->flags & Q_DATA_INTERLACED_SEQ_BT) {
 			/* Select initial value based on format */
 			if (q_data->flags & Q_DATA_INTERLACED_SEQ_BT)
 				field = 1;
@@ -2493,8 +2476,6 @@ static const struct v4l2_m2m_ops m2m_ops = {
 	.device_run	= device_run,
 	.job_ready	= job_ready,
 	.job_abort	= job_abort,
-	.lock		= vpe_lock,
-	.unlock		= vpe_unlock,
 };
 
 static int vpe_runtime_get(struct platform_device *pdev)
@@ -2544,7 +2525,6 @@ static void vpe_fw_cb(struct platform_device *pdev)
 	}
 
 	video_set_drvdata(vfd, dev);
-	snprintf(vfd->name, sizeof(vfd->name), "%s", vpe_videodev.name);
 	dev_info(dev->v4l2_dev.dev, "Device registered as /dev/video%d\n",
 		vfd->num);
 }
@@ -2553,6 +2533,13 @@ static int vpe_probe(struct platform_device *pdev)
 {
 	struct vpe_dev *dev;
 	int ret, irq, func;
+
+	ret = dma_coerce_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
+	if (ret) {
+		dev_err(&pdev->dev,
+			"32-bit consistent DMA enable failed\n");
+		return ret;
+	}
 
 	dev = devm_kzalloc(&pdev->dev, sizeof(*dev), GFP_KERNEL);
 	if (!dev)

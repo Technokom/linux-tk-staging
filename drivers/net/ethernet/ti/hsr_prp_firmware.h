@@ -1,20 +1,12 @@
-/*
- * Copyright (C) 2017-2018 Texas Instruments Incorporated - http://www.ti.com
+/* SPDX-License-Identifier: GPL-2.0 */
+/* Copyright (C) 2017-2018 Texas Instruments Incorporated - http://www.ti.com
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #ifndef __ICSS_SWITCH_HSR_PRP_H
 #define __ICSS_SWITCH_HSR_PRP_H
 
-#define HSR_TAG_SIZE                     6       /* HSR tag size */
+#define RED_TAG_RCT_SIZE                 6       /* HSR tag or PRP RCT size */
 
 #define LRE_HSR_MODE                      0x1E76
 #define MODEH                             0x01
@@ -88,82 +80,22 @@
 
 #define LRE_CNT_NODES                          (LRE_START + 52)
 
-/* SRAM
- * VLAN filter defines & offsets
- */
-#define VLAN_FLTR_CTRL_BYTE                          0x1FE
-/* one bit field | 0 : VLAN filter disabled
- *               | 1 : VLAN filter enabled
- */
-#define VLAN_FLTR_CTRL_SHIFT                         0x0
-/* one bit field | 0 : untagged host rcv allowed
- *               | 1 : untagged host rcv not allowed
- */
-#define VLAN_FLTR_UNTAG_HOST_RCV_CTRL_SHIFT          0x1
-/* one bit field | 0 : priotag host rcv allowed
- *               | 1 : priotag host rcv not allowed
- */
-#define VLAN_FLTR_PRIOTAG_HOST_RCV_CTRL_SHIFT        0x2
-#define VLAN_FLTR_DIS                                0x0
-#define VLAN_FLTR_ENA                                0x1
-
-#define VLAN_FLTR_UNTAG_HOST_RCV_ALL                 0x0
-#define VLAN_FLTR_UNTAG_HOST_RCV_NAL                 0x1
-
-#define VLAN_FLTR_PRIOTAG_HOST_RCV_ALL               0x0
-#define VLAN_FLTR_PRIOTAG_HOST_RCV_NAL               0x1
-
-/* VID = 0 for priority tagged frames */
-#define VLAN_FLTR_PRIOTAG_VID                        0x0
-#define VLAN_FLTR_TBL_BASE_ADDR                      0x200
-/* 4096 bits = 512 bytes = 0x200 bytes */
-#define VLAN_FLTR_TBL_SIZE                           0x200
-
-#define VLAN_VID_MIN                                 0x0
-#define VLAN_VID_MAX                                 0x0FFF
-
-/* Below Rx Interrupt pacing defines. */
-/* shared RAM */
-/* 1 byte for pace control */
-#define INTR_PAC_STATUS_OFFSET                       0x1FAF
-/* Interrupt Pacing disabled, Adaptive logic disabled */
-#define INTR_PAC_DIS_ADP_LGC_DIS                     0x0
-/* Interrupt Pacing enabled, Adaptive logic disabled */
-#define INTR_PAC_ENA_ADP_LGC_DIS                     0x1
-/* Interrupt Pacing enabled, Adaptive logic enabled */
-#define INTR_PAC_ENA_ADP_LGC_ENA                     0x2
-
-/* 4 bytes | previous TS from eCAP TSCNT for PRU 0 */
-#define INTR_PAC_PREV_TS_OFFSET_PRU0                 0x1FB0
-/* 4 bytes | timer expiration value for PRU 0 */
-#define INTR_PAC_TMR_EXP_OFFSET_PRU0                 0x1FB4
-/* 4 bytes | previous TS from eCAP TSCNT for PRU 1 */
-#define INTR_PAC_PREV_TS_OFFSET_PRU1                 0x1FB8
-/* 4 bytes | timer expiration value for PRU 1 */
-#define INTR_PAC_TMR_EXP_OFFSET_PRU1                 0x1FBC
-#define INTR_PAC_PREV_TS_RESET_VAL                   0x0
+/* SRAM */
 
 #define IEC62439_CONST_DUPLICATE_ACCEPT                 0x01
 #define IEC62439_CONST_DUPLICATE_DISCARD                0x02
 #define IEC62439_CONST_TRANSPARENT_RECEPTION_REMOVE_RCT 0x01
 #define IEC62439_CONST_TRANSPARENT_RECEPTION_PASS_RCT   0x02
 
-/* PRU1 DMEM
- * Multicast filter defines & offsets
+/* Enable/disable interrupts for high/low priority instead of per port.
+ * 0 = disabled (default) 1 = enabled
  */
-#define M_MULTICAST_TABLE_SEARCH_OP_CONTROL_BIT         0xE0
-/* one byte field :
- * 0 -> multicast filtering disabled
- * 1 -> multicast filtering enabled
- */
-#define MULTICAST_FILTER_DISABLED                       0x00
-#define MULTICAST_FILTER_ENABLED                        0x01
-#define MULTICAST_FILTER_MASK                           0xE4
-#define MULTICAST_FILTER_TABLE                          0x100
-#define MULTICAST_TABLE_SIZE                            256
-#define MULTICAST_FILTER_HOST_RCV_ALLOWED               0x01
-#define MULTICAST_FILTER_HOST_RCV_NOT_ALLOWED           0x00
+#define PRIORITY_INTRS_STATUS_OFFSET    0x1FAA
+/* Enable/disable timestamping of packets. 0 = disabled (default) 1 = enabled */
+#define TIMESTAMP_PKTS_STATUS_OFFSET    0x1FAB
+#define TIMESTAMP_ARRAY_OFFSET          0xC200
 
+/* PRU1 DMEM */
 /* Node table offsets are different for AM3/4 vs AM57/K2G, set by firmware */
 #define V1_0_HASH_MASK                 0x3F
 #define V1_0_INDEX_ARRAY_NT            0x10

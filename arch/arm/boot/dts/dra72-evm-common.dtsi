@@ -294,7 +294,7 @@
 			    <&pcf_hdmi 6	GPIO_ACTIVE_LOW>; /* VIN2_S2 */
 		port {
 			onboardLI: endpoint {
-				remote-endpoint = <&vin2a>;
+				remote-endpoint = <&vin2a_ep>;
 				hsync-active = <1>;
 				vsync-active = <1>;
 				pclk-sample = <0>;
@@ -491,7 +491,7 @@
 	pinctrl-3 = <&mmc4_pins_default>;
 	#address-cells = <1>;
 	#size-cells = <0>;
-	wlcore: wlcore@2 {
+	wifi@2 {
 		compatible = "ti,wl1835";
 		reg = <2>;
 		interrupt-parent = <&gpio5>;
@@ -599,8 +599,7 @@
 };
 
 &vin2a {
-	status = "okay";
-	endpoint@0 {
+	vin2a_ep: endpoint@0 {
 		slave-mode;
 		remote-endpoint = <&onboardLI>;
 	};
@@ -619,7 +618,7 @@
 
 &atl {
 	assigned-clocks = <&abe_dpll_sys_clk_mux>,
-			  <&atl_gfclk_mux>,
+			  <&atl_clkctrl DRA7_ATL_CLKCTRL 26>,
 			  <&dpll_abe_ck>,
 			  <&dpll_abe_m2x2_ck>,
 			  <&atl_clkin2_ck>;
@@ -637,7 +636,7 @@
 &mcasp3 {
 	#sound-dai-cells = <0>;
 
-	assigned-clocks = <&mcasp3_ahclkx_mux>;
+	assigned-clocks = <&l4per_clkctrl DRA7_MCASP3_CLKCTRL 24>;
 	assigned-clock-parents = <&atl_clkin2_ck>;
 
 	status = "okay";

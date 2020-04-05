@@ -14,7 +14,7 @@ controls the selection.
         | GPIO  |----------->| | irq0 |             |       Host IRQ
         +-------+            | +------+             |      controller
                              |    .        +-----+  |      +-------+
-        +-------+            |    .        |  0  |  |----->|  GIC  |
+        +-------+            |    .        |  0  |  |----->|  IRQ  |
         | INTA  |----------->|    .        +-----+  |      +-------+
         +-------+            |    .          .      |
                              | +------+      .      |
@@ -28,7 +28,7 @@ Configuration of these MUXCNTL_N registers is done by a system controller
 controller will keep track of the used and unused registers within the Router.
 Driver should request the system controller to get the range of GIC IRQs
 assigned to the requesting hosts. It is the drivers responsibility to keep
-track of GIC IRQs.
+track of Host IRQs.
 
 Communication between the host processor running an OS and the system
 controller happens through a protocol called TI System Control Interface
@@ -45,17 +45,13 @@ TISCI Interrupt Router Node:
 			Second cell should contain the interrupt source offset
 			within the device
 			Third cell specifies the trigger type as defined
-			in interrupts.txt in this directory. Also it contain
-			a flag TI_SCI_IS_EVENT_IRQ to specify if it an
-			IRQ from Interrupt Aggregator.
-- interrupt-parent:	phandle of irq parent for TISCI intr. The parent must
-			use the same interrupt-cells format as GIC.
+			in interrupts.txt in this directory. Only level
+			sensitive trigger types are supported.
+- interrupt-parent:	phandle of irq parent for TISCI intr.
 - ti,sci:		Phandle to TI-SCI compatible System controller node.
 - ti,sci-dst-id:	TISCI device ID of the destination IRQ controller.
-- ti,sci-dst-irq-type:	Tuple corresponding to unique TISCI resource type that
-			defines the dst host irq ranges assigned to this
-			interrupt router from this host context.
-			Tuple should be of format <type subtype>.
+- ti,sci-rm-range-girq:	TISCI subtype id representing the host irqs assigned
+			to this interrupt router.
 
 Example:
 --------
@@ -69,7 +65,7 @@ main_intr: interrupt-controller@1 {
 	#interrupt-cells = <3>;
 	ti,sci = <&dmsc>;
 	ti,sci-dst-id = <56>;
-	ti,sci-dst-irq-type = <0xb 0x1>;
+	ti,sci-rm-range-girq = <0x1>;
 };
 
 main_gpio0:  main_gpio0@600000 {

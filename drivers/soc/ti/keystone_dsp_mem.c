@@ -1,16 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * TI Keystone DSP Memory Mapping Driver
  *
- * Copyright (C) 2015-2018 Texas Instruments Incorporated - http://www.ti.com/
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ * Copyright (C) 2015-2019 Texas Instruments Incorporated - http://www.ti.com/
  */
 
 #include <linux/module.h>
@@ -31,7 +23,7 @@
 #define KEYSTONE_HIGH_PHYS_LIMIT	(KEYSTONE_HIGH_PHYS_START + \
 					 KEYSTONE_ALIAS_PHYS_SIZE)
 
-#define to_alias_addr(addr)	((addr - KEYSTONE_HIGH_PHYS_START) + \
+#define to_alias_addr(addr)	(((addr) - KEYSTONE_HIGH_PHYS_START) + \
 				 KEYSTONE_ALIAS_PHYS_START)
 
 /**
@@ -76,8 +68,9 @@ static ssize_t mem_size_show(struct keystone_dsp_mem *mem, char *buf)
 
 struct mem_sysfs_entry {
 	struct attribute attr;
-	ssize_t (*show)(struct keystone_dsp_mem *, char *);
-	ssize_t (*store)(struct keystone_dsp_mem *, const char *, size_t);
+	ssize_t (*show)(struct keystone_dsp_mem *mem, char *buf);
+	ssize_t (*store)(struct keystone_dsp_mem *mem, const char *buf,
+			 size_t len);
 };
 
 static struct mem_sysfs_entry addr_attribute =
@@ -201,10 +194,11 @@ static int keystone_dsp_mem_mmap(struct file *file, struct vm_area_struct *vma)
 	if (index < 0)
 		return index;
 
-	vma->vm_page_prot = phys_mem_access_prot(
-				file, (dsp_mem->mem[index].addr >> PAGE_SHIFT) +
-				(vma->vm_pgoff - index), size,
-				vma->vm_page_prot);
+	vma->vm_page_prot =
+		phys_mem_access_prot(file,
+				     (dsp_mem->mem[index].addr >> PAGE_SHIFT) +
+				     (vma->vm_pgoff - index), size,
+				     vma->vm_page_prot);
 
 	if (remap_pfn_range(vma, vma->vm_start,
 			    (dsp_mem->mem[index].addr >> PAGE_SHIFT) +
@@ -300,12 +294,16 @@ static int keystone_dsp_mem_init(void)
 	}
 
 	if ((!num_maps && !num_sram) ||
-	    (num_maps + num_sram > KEYSTONE_DSP_MEM_MAP_INDEX_MASK))
-		return -EINVAL;
+	    (num_maps + num_sram > KEYSTONE_DSP_MEM_MAP_INDEX_MASK)) {
+		ret = -EINVAL;
+		goto put_rmem;
+	}
 
 	dsp_mem = kzalloc(sizeof(*dsp_mem), GFP_KERNEL);
-	if (!dsp_mem)
-		return -ENOMEM;
+	if (!dsp_mem) {
+		ret = -ENOMEM;
+		goto put_rmem;
+	}
 
 	dsp_mem->mem = kcalloc(num_maps + num_sram, sizeof(*dsp_mem->mem),
 			       GFP_KERNEL);
@@ -317,13 +315,15 @@ static int keystone_dsp_mem_init(void)
 	/* handle reserved-memory carveouts */
 	if (num_maps) {
 		for_each_available_child_of_node(rmem_np, np) {
-			if (!of_device_is_compatible(
-					np, "ti,keystone-dsp-mem-pool"))
+			if (!of_device_is_compatible(np,
+						"ti,keystone-dsp-mem-pool"))
 				continue;
 
 			ret = keystone_dsp_mem_parse(np, i);
-			if (ret)
+			if (ret) {
+				of_node_put(np);
 				goto free_mem;
+			}
 			i++;
 			dsp_mem->num_maps++;
 		}
@@ -339,6 +339,7 @@ static int keystone_dsp_mem_init(void)
 			ret = of_address_to_resource(sram_np, 0, &res);
 			if (ret) {
 				ret = -EINVAL;
+				of_node_put(sram_np);
 				goto free_mem;
 			}
 			dsp_mem->mem[i].addr = res.start;
@@ -364,6 +365,7 @@ static int keystone_dsp_mem_init(void)
 		pr_err("%s: error creating sysfs files (%d)\n", __func__, ret);
 		goto unregister_misc;
 	}
+	of_node_put(rmem_np);
 
 	pr_info("registered dspmem misc device\n");
 
@@ -376,6 +378,8 @@ free_mem:
 free_dsp:
 	kfree(dsp_mem);
 	dsp_mem = NULL;
+put_rmem:
+	of_node_put(rmem_np);
 	return ret;
 }
 

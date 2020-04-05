@@ -178,7 +178,6 @@ struct clkdm_ops {
 	void	(*clkdm_deny_idle)(struct clockdomain *clkdm);
 	int	(*clkdm_clk_enable)(struct clockdomain *clkdm);
 	int	(*clkdm_clk_disable)(struct clockdomain *clkdm);
-	u32	(*clkdm_xlate_address)(struct clockdomain *clkdm);
 	int	(*clkdm_save_context)(struct clockdomain *clkdm);
 	int	(*clkdm_restore_context)(struct clockdomain *clkdm);
 };
@@ -219,7 +218,6 @@ int clkdm_clk_enable(struct clockdomain *clkdm, struct clk *clk);
 int clkdm_clk_disable(struct clockdomain *clkdm, struct clk *clk);
 int clkdm_hwmod_enable(struct clockdomain *clkdm, struct omap_hwmod *oh);
 int clkdm_hwmod_disable(struct clockdomain *clkdm, struct omap_hwmod *oh);
-u32 clkdm_xlate_address(struct clockdomain *clkdm);
 
 void clkdm_save_context(void);
 void clkdm_restore_context(void);

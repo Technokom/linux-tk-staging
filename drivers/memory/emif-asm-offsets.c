@@ -16,7 +16,7 @@
 
 int main(void)
 {
-	ti_emif_offsets();
+	ti_emif_asm_offsets();
 
 	return 0;
 }

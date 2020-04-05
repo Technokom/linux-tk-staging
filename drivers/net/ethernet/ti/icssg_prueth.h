@@ -20,23 +20,29 @@
 #include <linux/of_net.h>
 #include <linux/of_platform.h>
 #include <linux/mfd/syscon.h>
+#include <linux/net_tstamp.h>
 #include <linux/phy.h>
 #include <linux/pruss.h>
+#include <linux/ptp_clock_kernel.h>
 #include <linux/remoteproc.h>
 
 #include <linux/dma-mapping.h>
 #include <linux/dma/ti-cppi5.h>
 #include <linux/dma/k3-navss-udma.h>
 
+#include "icssg_config.h"
+#include "icssg_iep.h"
+
 #define ICSS_SLICE0	0
 #define ICSS_SLICE1	1
 
+/* below used to support 2 icssg per pru port */
+#define ICSSG0		0
+#define ICSSG1		1
+#define NUM_ICSSG	2
+
 #define ICSS_FW_PRU	0
 #define ICSS_FW_RTU	1
-
-/* Handshake region lies in shared RAM */
-#define ICSS_HS_OFFSET_SLICE0	0
-#define ICSS_HS_OFFSET_SLICE1	0x8000
 
 /* Firmware status codes */
 #define ICSS_HS_FW_READY 0x55555555
@@ -62,20 +68,6 @@
 #define ICSS_SET_RUN_FLAG_FLOOD_UNICAST		BIT(1)	/* switch only */
 #define ICSS_SET_RUN_FLAG_PROMISC		BIT(2)	/* MAC only */
 #define ICSS_SET_RUN_FLAG_MULTICAST_PROMISC	BIT(3)	/* MAC only */
-
-/* Fiwmware Handshake */
-struct icss_hs {
-			/* Owner : Description */
-	__le32 fw_status;	/* FW : firmware boot status */
-	__le32 cmd;		/* bits 31 and 30 owned by Firwmware, rest by Host */
-	__le16 log_len;		/* FW: length of log area (in 32-bit words) */
-	__le16 ilen_max;	/* FW:  max. length of input params (32-bit words) */
-	__le32 ilen;		/* HOST: number of input parameters (32-bit words) */
-	__le32 ioffset;		/* FW: offset to input parameters */
-	__le32 olen;		/* FW: length of output data (in 32-bit words) */
-	__le32 ooffset;		/* FW: offset to output data */
-	__le32 log_offset;	/* FW: offset to log area */
-} __packed;
 
 /* In switch mode there are 3 real ports i.e. 3 mac addrs.
  * however Linux sees only the host side port. The other 2 ports
@@ -104,11 +96,16 @@ struct prueth_tx_chn {
 };
 
 struct prueth_rx_chn {
+	struct device *dev;
 	struct k3_knav_desc_pool *desc_pool;
 	struct k3_nav_udmax_rx_channel *rx_chn;
 	u32 descs_num;
 	spinlock_t lock;	/* to serialize */
 	unsigned int irq;
+};
+
+enum prueth_state_flags {
+	__STATE_TX_TS_IN_PROGRESS,
 };
 
 /* data for each emac port */
@@ -119,7 +116,10 @@ struct prueth_emac {
 	struct napi_struct napi_tx;
 	struct napi_struct napi_rx;
 	u32 msg_enable;
-
+	int egress_icssg;
+	int egress_slice;
+	int ingress_icssg;
+	int ingress_slice;
 	int link;
 	int speed;
 	int duplex;
@@ -129,15 +129,26 @@ struct prueth_emac {
 	int phy_if;
 	struct phy_device *phydev;
 	enum prueth_port port_id;
+	struct icssg_iep iep;
+	struct hwtstamp_config tstamp_config;
+	unsigned int rx_ts_enabled : 1;
+	unsigned int tx_ts_enabled : 1;
 
 	/* DMA related */
 	struct prueth_tx_chn tx_chns;
 	struct completion tdown_complete;
 	struct prueth_rx_chn rx_chns;
 	int rx_flow_id_base;
+	struct prueth_rx_chn rx_mgm_chn;
+	int rx_mgm_flow_id_base;
 
 	spinlock_t lock;	/* serialize access */
 	unsigned int flags;
+
+	/* TX HW Timestamping */
+	u32 tx_ts_cookie;
+	struct sk_buff *tx_ts_skb;
+	unsigned long state;
 };
 
 /**
@@ -153,37 +164,37 @@ struct prueth_emac {
  * @emac: private EMAC data structure
  * @registered_netdevs: list of registered netdevs
  * @fw_data: firmware names to be used with PRU remoteprocs
- * @hs: firmware handshake data per slice
- * @pruss_id: PRUSS instance id
+ * @config: firmware load time configuration per slice
  * @miig_rt: regmap to mii_g_rt block
+ * @pruss_id: PRUSS instance id
  */
 struct prueth {
 	struct device *dev;
-	struct pruss *pruss;
-	struct rproc *pru[PRUSS_NUM_PRUS];
-	struct rproc *rtu[PRUSS_NUM_PRUS];
-	struct pruss_mem_region shram;
+	struct pruss *pruss[NUM_ICSSG];
+	struct rproc *pru[NUM_ICSSG][PRUSS_NUM_PRUS];
+	struct rproc *rtu[NUM_ICSSG][PRUSS_NUM_PRUS];
+	struct pruss_mem_region shram[NUM_ICSSG];
 	struct gen_pool *sram_pool;
-	struct pruss_mem_region msmcram;
+	struct pruss_mem_region msmcram[NUM_ICSSG];
 
 	struct device_node *eth_node[PRUETH_NUM_MACS];
 	struct prueth_emac *emac[PRUETH_NUM_MACS];
 	struct net_device *registered_netdevs[PRUETH_NUM_MACS];
 	const struct prueth_private_data *fw_data;
-	struct icss_hs hs[PRUSS_NUM_PRUS];
-	int pruss_id;
-	struct regmap *miig_rt;
+	struct icssg_config config[NUM_ICSSG][PRUSS_NUM_PRUS];
+	struct regmap *miig_rt[NUM_ICSSG];
+	struct regmap *mii_rt[NUM_ICSSG];
+	int pruss_id[NUM_ICSSG];
+	/* For boards with dual icss per prueth port, this will be true */
+	bool dual_icssg;
 };
 
-bool icss_hs_is_fw_dead(struct prueth *prueth, int slice, u16 *err_code);
-bool icss_hs_is_fw_ready(struct prueth *prueth, int slice);
-int icss_hs_send_cmd(struct prueth *prueth, int slice, u32 cmd,
-		     u32 *idata, u32 ilen);
-void icss_hs_cmd_cancel(struct prueth *prueth, int slice);
-bool icss_hs_is_cmd_done(struct prueth *prueth, int slice);
-int icss_hs_send_cmd_wait_done(struct prueth *prueth, int slice,
-			       u32 cmd, u32 *idata, u32 ilen);
-int icss_hs_get_result(struct prueth *prueth, int slice, u32 *odata, u32 olen);
+struct emac_tx_ts_response {
+	u32 lo_ts;
+	u32 hi_ts;
+	u32 reserved;
+	u32 cookie;
+};
 
 /* Classifier helpers */
 void icssg_class_set_mac_addr(struct regmap *miig_rt, int slice, u8 *mac);

@@ -1,9 +1,9 @@
 /*
  * hsr_prp_debugfs code
- * Copyright (C) 2017 Texas Instruments Incorporated
+ * Copyright (C) 2019 Texas Instruments Incorporated
  *
  * Author(s):
- *	Murali Karicheri <m-karicheri2@ti.com?
+ *	Murali Karicheri <m-karicheri2@ti.com>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -26,7 +26,7 @@ static int
 hsr_prp_lre_info_show(struct seq_file *sfp, void *data)
 {
 	struct hsr_prp_priv *priv = (struct hsr_prp_priv *)sfp->private;
-	bool prp = priv->prot_ver > HSR_V1;
+	bool prp = priv->prot_version > HSR_V1;
 
 	seq_puts(sfp, "LRE debug information\n");
 	seq_printf(sfp, "Protocol : %s\n", prp ? "PRP" : "HSR");
@@ -47,6 +47,8 @@ hsr_prp_lre_info_show(struct seq_file *sfp, void *data)
 			   priv->sv_frame_dei);
 	}
 	seq_printf(sfp, "cnt_tx_sup = %d\n", priv->dbg_stats.cnt_tx_sup);
+	seq_printf(sfp, "cnt_rx_sup_A = %d\n", priv->dbg_stats.cnt_rx_sup_a);
+	seq_printf(sfp, "cnt_rx_sup_B = %d\n", priv->dbg_stats.cnt_rx_sup_b);
 	seq_printf(sfp, "disable SV Frame = %d\n", priv->disable_sv_frame);
 	seq_puts(sfp, "\n");
 	return 0;
@@ -72,22 +74,20 @@ static const struct file_operations hsr_prp_lre_info_fops = {
 	.release = single_release,
 };
 
-/* hsr_prp_debugfs_init - create hsr-prp node_table file for dumping
- * the node table
+/* hsr_prp_debugfs_init - create debugfs to dump lre info
  *
  * Description:
- * When debugfs is configured this routine sets up the node_table file per
- * hsr/prp device for dumping the node_table entries
+ * dump lre info of hsr or prp device
  */
 int hsr_prp_debugfs_init(struct hsr_prp_priv *priv,
-			 struct net_device *hsr_prp_dev)
+			 struct net_device *ndev)
 {
 	int rc = -1;
 	struct dentry *de = NULL;
 
-	de = debugfs_create_dir(hsr_prp_dev->name, NULL);
+	de = debugfs_create_dir(ndev->name, NULL);
 	if (!de) {
-		netdev_err(hsr_prp_dev, "Cannot create hsr-prp debugfs root\n");
+		netdev_err(ndev, "Cannot create debugfs root %s\n", ndev->name);
 		return rc;
 	}
 
@@ -97,20 +97,24 @@ int hsr_prp_debugfs_init(struct hsr_prp_priv *priv,
 				 priv->root_dir, priv,
 				 &hsr_prp_lre_info_fops);
 	if (!de) {
-		netdev_err(hsr_prp_dev,
+		netdev_err(ndev,
 			   "Cannot create hsr-prp lre_info file\n");
-		return rc;
+		goto error;
 	}
 	priv->lre_info_file = de;
 
 	return 0;
+
+error:
+	debugfs_remove(priv->root_dir);
+	return -ENODEV;
 } /* end of hst_prp_debugfs_init */
 
 /* hsr_prp_debugfs_term - Tear down debugfs intrastructure
  *
  * Description:
  * When Debufs is configured this routine removes debugfs file system
- * elements that are specific to hsr-prp
+ * elements that are specific to hsr
  */
 void
 hsr_prp_debugfs_term(struct hsr_prp_priv *priv)

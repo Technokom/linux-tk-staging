@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0
 #
 # RPMsg Sockets
 #
@@ -7,7 +8,7 @@ config RPMSG_PROTO
 	default n
 	depends on RPMSG_VIRTIO
 	depends on REMOTEPROC
-	---help---
+	help
 	  An rpmsg driver that provides support for remote processor messaging
 	  sockets over the virtio rpmsg transport. This exposes a socket
 	  interface to user space to allow applications to communicate with

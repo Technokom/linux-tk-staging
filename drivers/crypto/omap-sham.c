@@ -830,9 +830,6 @@ static int omap_sham_prepare_request(struct ahash_request *req, bool update)
 	bool final = rctx->flags & BIT(FLAGS_FINUP);
 	int xmit_len, hash_later;
 
-	if (!req)
-		return 0;
-
 	bs = get_block_size(rctx);
 
 	if (update)
@@ -1512,8 +1509,7 @@ static struct ahash_alg algs_sha1_md5[] = {
 		.cra_name		= "sha1",
 		.cra_driver_name	= "omap-sha1",
 		.cra_priority		= 400,
-		.cra_flags		= CRYPTO_ALG_TYPE_AHASH |
-						CRYPTO_ALG_KERN_DRIVER_ONLY |
+		.cra_flags		= CRYPTO_ALG_KERN_DRIVER_ONLY |
 						CRYPTO_ALG_ASYNC |
 						CRYPTO_ALG_NEED_FALLBACK,
 		.cra_blocksize		= SHA1_BLOCK_SIZE,
@@ -1535,8 +1531,7 @@ static struct ahash_alg algs_sha1_md5[] = {
 		.cra_name		= "md5",
 		.cra_driver_name	= "omap-md5",
 		.cra_priority		= 400,
-		.cra_flags		= CRYPTO_ALG_TYPE_AHASH |
-						CRYPTO_ALG_KERN_DRIVER_ONLY |
+		.cra_flags		= CRYPTO_ALG_KERN_DRIVER_ONLY |
 						CRYPTO_ALG_ASYNC |
 						CRYPTO_ALG_NEED_FALLBACK,
 		.cra_blocksize		= SHA1_BLOCK_SIZE,
@@ -1559,8 +1554,7 @@ static struct ahash_alg algs_sha1_md5[] = {
 		.cra_name		= "hmac(sha1)",
 		.cra_driver_name	= "omap-hmac-sha1",
 		.cra_priority		= 400,
-		.cra_flags		= CRYPTO_ALG_TYPE_AHASH |
-						CRYPTO_ALG_KERN_DRIVER_ONLY |
+		.cra_flags		= CRYPTO_ALG_KERN_DRIVER_ONLY |
 						CRYPTO_ALG_ASYNC |
 						CRYPTO_ALG_NEED_FALLBACK,
 		.cra_blocksize		= SHA1_BLOCK_SIZE,
@@ -1584,8 +1578,7 @@ static struct ahash_alg algs_sha1_md5[] = {
 		.cra_name		= "hmac(md5)",
 		.cra_driver_name	= "omap-hmac-md5",
 		.cra_priority		= 400,
-		.cra_flags		= CRYPTO_ALG_TYPE_AHASH |
-						CRYPTO_ALG_KERN_DRIVER_ONLY |
+		.cra_flags		= CRYPTO_ALG_KERN_DRIVER_ONLY |
 						CRYPTO_ALG_ASYNC |
 						CRYPTO_ALG_NEED_FALLBACK,
 		.cra_blocksize		= SHA1_BLOCK_SIZE,
@@ -1612,8 +1605,7 @@ static struct ahash_alg algs_sha224_sha256[] = {
 		.cra_name		= "sha224",
 		.cra_driver_name	= "omap-sha224",
 		.cra_priority		= 400,
-		.cra_flags		= CRYPTO_ALG_TYPE_AHASH |
-						CRYPTO_ALG_ASYNC |
+		.cra_flags		= CRYPTO_ALG_ASYNC |
 						CRYPTO_ALG_NEED_FALLBACK,
 		.cra_blocksize		= SHA224_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct omap_sham_ctx),
@@ -1634,8 +1626,7 @@ static struct ahash_alg algs_sha224_sha256[] = {
 		.cra_name		= "sha256",
 		.cra_driver_name	= "omap-sha256",
 		.cra_priority		= 400,
-		.cra_flags		= CRYPTO_ALG_TYPE_AHASH |
-						CRYPTO_ALG_ASYNC |
+		.cra_flags		= CRYPTO_ALG_ASYNC |
 						CRYPTO_ALG_NEED_FALLBACK,
 		.cra_blocksize		= SHA256_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct omap_sham_ctx),
@@ -1657,8 +1648,7 @@ static struct ahash_alg algs_sha224_sha256[] = {
 		.cra_name		= "hmac(sha224)",
 		.cra_driver_name	= "omap-hmac-sha224",
 		.cra_priority		= 400,
-		.cra_flags		= CRYPTO_ALG_TYPE_AHASH |
-						CRYPTO_ALG_ASYNC |
+		.cra_flags		= CRYPTO_ALG_ASYNC |
 						CRYPTO_ALG_NEED_FALLBACK,
 		.cra_blocksize		= SHA224_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct omap_sham_ctx) +
@@ -1681,8 +1671,7 @@ static struct ahash_alg algs_sha224_sha256[] = {
 		.cra_name		= "hmac(sha256)",
 		.cra_driver_name	= "omap-hmac-sha256",
 		.cra_priority		= 400,
-		.cra_flags		= CRYPTO_ALG_TYPE_AHASH |
-						CRYPTO_ALG_ASYNC |
+		.cra_flags		= CRYPTO_ALG_ASYNC |
 						CRYPTO_ALG_NEED_FALLBACK,
 		.cra_blocksize		= SHA256_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct omap_sham_ctx) +
@@ -1707,8 +1696,7 @@ static struct ahash_alg algs_sha384_sha512[] = {
 		.cra_name		= "sha384",
 		.cra_driver_name	= "omap-sha384",
 		.cra_priority		= 400,
-		.cra_flags		= CRYPTO_ALG_TYPE_AHASH |
-						CRYPTO_ALG_ASYNC |
+		.cra_flags		= CRYPTO_ALG_ASYNC |
 						CRYPTO_ALG_NEED_FALLBACK,
 		.cra_blocksize		= SHA384_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct omap_sham_ctx),
@@ -1729,8 +1717,7 @@ static struct ahash_alg algs_sha384_sha512[] = {
 		.cra_name		= "sha512",
 		.cra_driver_name	= "omap-sha512",
 		.cra_priority		= 400,
-		.cra_flags		= CRYPTO_ALG_TYPE_AHASH |
-						CRYPTO_ALG_ASYNC |
+		.cra_flags		= CRYPTO_ALG_ASYNC |
 						CRYPTO_ALG_NEED_FALLBACK,
 		.cra_blocksize		= SHA512_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct omap_sham_ctx),
@@ -1752,8 +1739,7 @@ static struct ahash_alg algs_sha384_sha512[] = {
 		.cra_name		= "hmac(sha384)",
 		.cra_driver_name	= "omap-hmac-sha384",
 		.cra_priority		= 400,
-		.cra_flags		= CRYPTO_ALG_TYPE_AHASH |
-						CRYPTO_ALG_ASYNC |
+		.cra_flags		= CRYPTO_ALG_ASYNC |
 						CRYPTO_ALG_NEED_FALLBACK,
 		.cra_blocksize		= SHA384_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct omap_sham_ctx) +
@@ -1776,8 +1762,7 @@ static struct ahash_alg algs_sha384_sha512[] = {
 		.cra_name		= "hmac(sha512)",
 		.cra_driver_name	= "omap-hmac-sha512",
 		.cra_priority		= 400,
-		.cra_flags		= CRYPTO_ALG_TYPE_AHASH |
-						CRYPTO_ALG_ASYNC |
+		.cra_flags		= CRYPTO_ALG_ASYNC |
 						CRYPTO_ALG_NEED_FALLBACK,
 		.cra_blocksize		= SHA512_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(struct omap_sham_ctx) +
@@ -1816,7 +1801,7 @@ static void omap_sham_done_task(unsigned long data)
 		if (test_and_clear_bit(FLAGS_OUTPUT_READY, &dd->flags)) {
 			/* hash or semi-hash ready */
 			clear_bit(FLAGS_DMA_READY, &dd->flags);
-				goto finish;
+			goto finish;
 		}
 	}
 
@@ -1999,11 +1984,10 @@ static int omap_sham_get_res_of(struct omap_sham_dev *dd,
 		struct device *dev, struct resource *res)
 {
 	struct device_node *node = dev->of_node;
-	const struct of_device_id *match;
 	int err = 0;
 
-	match = of_match_device(of_match_ptr(omap_sham_of_match), dev);
-	if (!match) {
+	dd->pdata = of_device_get_match_data(dev);
+	if (!dd->pdata) {
 		dev_err(dev, "no compatible OF match\n");
 		err = -EINVAL;
 		goto err;
@@ -2022,8 +2006,6 @@ static int omap_sham_get_res_of(struct omap_sham_dev *dd,
 		err = -EINVAL;
 		goto err;
 	}
-
-	dd->pdata = match->data;
 
 err:
 	return err;
@@ -2293,6 +2275,8 @@ static int omap_sham_remove(struct platform_device *pdev)
 
 	if (!dd->polling_mode)
 		dma_release_channel(dd->dma_lch);
+
+	sysfs_remove_group(&dd->dev->kobj, &omap_sham_attr_group);
 
 	return 0;
 }

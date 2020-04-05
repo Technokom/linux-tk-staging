@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: BSD-3-Clause */
+
 #ifndef _LINUX_RPMSG_VIRTIO_RPMSG_H
 #define _LINUX_RPMSG_VIRTIO_RPMSG_H
 

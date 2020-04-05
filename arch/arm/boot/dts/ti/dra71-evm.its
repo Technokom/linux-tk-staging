@@ -48,10 +48,9 @@
 			kernel = "kernel@1";
 			fdt = "fdt@1";
 		};
-		dra71-evm-lcd-auo-g101evn01.0 {
+		lcd-auo-g101evn01.0 {
 			description = "DRA71x-evm with LCD overlay";
-			kernel = "kernel@1";
-			fdt = "fdt@1", "fdt@2";
+			fdt = "fdt@2";
 		};
 		dra71-evm-nand {
 			description = "DRA71x-evm with NAND overlay";

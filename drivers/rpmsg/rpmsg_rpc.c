@@ -2,7 +2,7 @@
 /*
  * Remote Processor Procedure Call Driver
  *
- * Copyright (C) 2012-2018 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2012-2019 Texas Instruments Incorporated - http://www.ti.com/
  *	Erik Rainey <erik.rainey@ti.com>
  *	Suman Anna <s-anna@ti.com>
  */
@@ -978,30 +978,26 @@ failure:
 	return ret;
 }
 
-static unsigned int rppc_poll(struct file *filp, struct poll_table_struct *wait)
+static __poll_t rppc_poll(struct file *filp, struct poll_table_struct *wait)
 {
 	struct rppc_instance *rpc = filp->private_data;
-	unsigned int mask = 0;
-
-	if (mutex_lock_interruptible(&rpc->lock))
-		return -ERESTARTSYS;
+	__poll_t mask = 0;
 
 	poll_wait(filp, &rpc->readq, wait);
 	if (rpc->state == RPPC_STATE_STALE) {
-		mask = POLLERR;
+		mask = EPOLLERR;
 		goto out;
 	}
 
 	/* if the queue is not empty set the poll bit correctly */
 	if (!skb_queue_empty(&rpc->queue))
-		mask |= (POLLIN | POLLRDNORM);
+		mask |= (EPOLLIN | EPOLLRDNORM);
 
 	/* TODO: writes are deemed to be successful always, fix this later */
 	if (true)
-		mask |= POLLOUT | POLLWRNORM;
+		mask |= EPOLLOUT | EPOLLWRNORM;
 
 out:
-	mutex_unlock(&rpc->lock);
 	return mask;
 }
 

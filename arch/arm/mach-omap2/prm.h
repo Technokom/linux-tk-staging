@@ -29,11 +29,9 @@ int omap2_prcm_base_init(void);
  *
  * PRM_HAS_IO_WAKEUP: has IO wakeup capability
  * PRM_HAS_VOLTAGE: has voltage domains
- * PRM_IRQ_DEFAULT: use default irq number for PRM irq
  */
 #define PRM_HAS_IO_WAKEUP	BIT(0)
 #define PRM_HAS_VOLTAGE		BIT(1)
-#define PRM_IRQ_DEFAULT		BIT(2)
 
 /*
  * MAX_MODULE_SOFTRESET_WAIT: Maximum microseconds to wait for OMAP
@@ -181,8 +179,6 @@ int omap_prm_clear_mod_irqs(s16 module, u8 regs, u32 wkst_mask);
 u32 omap_prm_vp_check_txdone(u8 vp_id);
 void omap_prm_vp_clear_txdone(u8 vp_id);
 
-void am43xx_prm_save_context(void);
-void am43xx_prm_restore_context(void);
 #endif
 
 

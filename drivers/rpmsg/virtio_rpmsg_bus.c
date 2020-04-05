@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Virtio-based remote processor messaging bus
  *
@@ -6,15 +7,6 @@
  *
  * Ohad Ben-Cohen <ohad@wizery.com>
  * Brian Swetland <swetland@google.com>
- *
- * This software is licensed under the terms of the GNU General Public
- * License version 2, as published by the Free Software Foundation, and
- * may be copied, distributed, and modified under those terms.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
@@ -84,7 +76,6 @@ struct virtproc_info {
 /**
  * struct rpmsg_ns_msg - dynamic name service announcement message
  * @name: name of remote service that is published
- * @desc: description of remote service
  * @addr: address of remote service that is published
  * @flags: indicates whether service is created or destroyed
  *
@@ -95,6 +86,22 @@ struct virtproc_info {
  * (if/as-soon-as one is registered).
  */
 struct rpmsg_ns_msg {
+	char name[RPMSG_NAME_SIZE];
+	u32 addr;
+	u32 flags;
+} __packed;
+
+/**
+ * struct rpmsg_ns_msg_ext - dynamic name service announcement message v2
+ * @name: name of remote service that is published
+ * @desc: description of remote service
+ * @addr: address of remote service that is published
+ * @flags: indicates whether service is created or destroyed
+ *
+ * Interchangeable nameservice message with rpmsg_ns_msg. This one has
+ * the addition of the desc field for extra flexibility.
+ */
+struct rpmsg_ns_msg_ext {
 	char name[RPMSG_NAME_SIZE];
 	char desc[RPMSG_NAME_SIZE];
 	u32 addr;
@@ -191,8 +198,7 @@ static void
 rpmsg_sg_init(struct virtproc_info *vrp, struct scatterlist *sg,
 	      void *cpu_addr, unsigned int len)
 {
-	if (IS_BUILTIN(CONFIG_PHYS_ADDR_T_64BIT) &&
-	    !IS_BUILTIN(CONFIG_ARCH_DMA_ADDR_T_64BIT))  {
+	if (of_machine_is_compatible("ti,keystone")) {
 		unsigned long offset = cpu_addr - vrp->rbufs;
 		dma_addr_t dma_addr = vrp->bufs_dma + offset;
 
@@ -822,18 +828,29 @@ static int rpmsg_ns_cb(struct rpmsg_device *rpdev, void *data, int len,
 		       void *priv, u32 src)
 {
 	struct rpmsg_ns_msg *msg = data;
+	struct rpmsg_ns_msg_ext *msg_ext = data;
 	struct rpmsg_device *newch;
 	struct rpmsg_channel_info chinfo;
 	struct virtproc_info *vrp = priv;
 	struct device *dev = &vrp->vdev->dev;
 	int ret;
+	u32 addr;
+	u32 flags;
 
 #if defined(CONFIG_DYNAMIC_DEBUG)
 	dynamic_hex_dump("NS announcement: ", DUMP_PREFIX_NONE, 16, 1,
 			 data, len, true);
 #endif
 
-	if (len != sizeof(*msg)) {
+	if (len == sizeof(*msg)) {
+		addr = msg->addr;
+		flags = msg->flags;
+		chinfo.desc[0] = '\0';
+	} else if (len == sizeof(*msg_ext)) {
+		addr = msg_ext->addr;
+		flags = msg_ext->flags;
+		strncpy(chinfo.desc, msg_ext->desc, sizeof(chinfo.desc));
+	} else if (len != sizeof(*msg)) {
 		dev_err(dev, "malformed ns msg (%d)\n", len);
 		return -EINVAL;
 	}
@@ -853,15 +870,14 @@ static int rpmsg_ns_cb(struct rpmsg_device *rpdev, void *data, int len,
 	msg->name[RPMSG_NAME_SIZE - 1] = '\0';
 
 	dev_info(dev, "%sing channel %s addr 0x%x\n",
-		 msg->flags & RPMSG_NS_DESTROY ? "destroy" : "creat",
-		 msg->name, msg->addr);
+		 flags & RPMSG_NS_DESTROY ? "destroy" : "creat",
+		 msg->name, addr);
 
 	strncpy(chinfo.name, msg->name, sizeof(chinfo.name));
-	strncpy(chinfo.desc, msg->desc, sizeof(chinfo.desc));
 	chinfo.src = RPMSG_ADDR_ANY;
-	chinfo.dst = msg->addr;
+	chinfo.dst = addr;
 
-	if (msg->flags & RPMSG_NS_DESTROY) {
+	if (flags & RPMSG_NS_DESTROY) {
 		ret = rpmsg_unregister_device(&vrp->vdev->dev, &chinfo);
 		if (ret)
 			dev_err(dev, "rpmsg_destroy_channel failed: %d\n", ret);

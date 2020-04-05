@@ -23,12 +23,13 @@ keystone_netcp-y := netcp_core.o
 obj-$(CONFIG_TI_KEYSTONE_NETCP_ETHSS) += keystone_netcp_ethss.o
 keystone_netcp_ethss-y := netcp_ethss.o netcp_ethss_sysfs.o netcp_sgmii.o
 
+obj-$(CONFIG_TI_AM65_CPSW_NUSS) += ti-am65-cpsw-nuss.o
+ti-am65-cpsw-nuss-y := am65-cpsw-nuss.o cpsw_sl.o am65-cpsw-ethtool.o
+obj-$(CONFIG_TI_AM65_CPTS) += am65-cpts.o
+
 obj-$(CONFIG_TI_PRUETH) += ti_prueth.o
 ti_prueth-y := prueth.o iep.o prueth_node_tbl.o
 ti_prueth-$(CONFIG_SYSFS) += prueth_sysfs.o
 ti_prueth-$(CONFIG_DEBUG_FS) += prueth_dbgfs.o
-obj-$(CONFIG_TI_AM65_CPSW_NUSS) += ti-am65-cpsw-nuss.o
-ti-am65-cpsw-nuss-y := am65-cpsw-nuss.o cpsw_sl.o am65-cpsw-ethtool.o
-obj-$(CONFIG_TI_AM65_CPTS) += am65-cpts.o
 obj-$(CONFIG_TI_ICSSG_PRUETH) += icssg-prueth.o
-icssg-prueth-y := icssg_prueth.o icssg_hs.o icssg_classifier.o icssg_ethtool.o
+icssg-prueth-y := icssg_prueth.o icssg_classifier.o icssg_ethtool.o icssg_iep.o

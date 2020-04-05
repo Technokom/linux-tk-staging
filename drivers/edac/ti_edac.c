@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (C) 2017 Texas Instruments Incorporated - http://www.ti.com/
  *
@@ -199,11 +200,10 @@ static const struct of_device_id ti_edac_of_match[] = {
 
 static int _emif_get_id(struct device_node *node)
 {
-	const __be32 *addrp;
-	u32 addr;
-	u32 my_addr;
-	int my_id = 0;
 	struct device_node *np;
+	const __be32 *addrp;
+	u32 addr, my_addr;
+	int my_id = 0;
 
 	addrp = of_get_address(node, 0, NULL, NULL);
 	my_addr = (u32)of_translate_address(node, addrp);
@@ -215,8 +215,9 @@ static int _emif_get_id(struct device_node *node)
 		addrp = of_get_address(np, 0, NULL, NULL);
 		addr = (u32)of_translate_address(np, addrp);
 
-		pr_info("%s: addr=%x, my_addr=%x\n", __func__,
-			addr, my_addr);
+		edac_printk(KERN_INFO, EDAC_MOD_NAME,
+			    "addr=%x, my_addr=%x\n",
+			    addr, my_addr);
 
 		if (addr < my_addr)
 			my_id++;

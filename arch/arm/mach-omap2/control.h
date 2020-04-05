@@ -528,10 +528,6 @@ void omap3_ctrl_init(void);
 int omap2_control_base_init(void);
 int omap_control_init(void);
 void omap2_set_globals_control(void __iomem *ctrl);
-extern void am33xx_control_save_context(void);
-extern void am33xx_control_restore_context(void);
-extern void am43xx_control_save_context(void);
-extern void am43xx_control_restore_context(void);
 void __init omap3_control_legacy_iomap_init(void);
 #else
 #define omap_ctrl_readb(x)		0

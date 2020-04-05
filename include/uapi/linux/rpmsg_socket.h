@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause) */
 /*
  * Remote processor messaging sockets
  *
@@ -5,15 +6,6 @@
  *
  * Ohad Ben-Cohen <ohad@wizery.com>
  * Suman Anna <s-anna@ti.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #ifndef _UAPI_RPMSG_SOCKET_H
@@ -24,7 +16,7 @@
 
 /* user space needs this */
 #ifndef AF_RPMSG
-#define AF_RPMSG	44
+#define AF_RPMSG	45
 #define PF_RPMSG	AF_RPMSG
 #endif
 

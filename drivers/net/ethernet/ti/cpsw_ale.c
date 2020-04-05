@@ -172,7 +172,7 @@ static inline void cpsw_ale_get_addr(u32 *ale_entry, u8 *addr)
 		addr[i] = cpsw_ale_get_field(ale_entry, 40 - 8*i, 8);
 }
 
-static inline void cpsw_ale_set_addr(u32 *ale_entry, u8 *addr)
+static inline void cpsw_ale_set_addr(u32 *ale_entry, const u8 *addr)
 {
 	int i;
 
@@ -211,7 +211,7 @@ static int cpsw_ale_write(struct cpsw_ale *ale, int idx, u32 *ale_entry)
 	return idx;
 }
 
-static int cpsw_ale_match_addr(struct cpsw_ale *ale, u8 *addr, u16 vid)
+static int cpsw_ale_match_addr(struct cpsw_ale *ale, const u8 *addr, u16 vid)
 {
 	u32 ale_entry[ALE_ENTRY_WORDS];
 	int type, idx;
@@ -345,7 +345,7 @@ static inline void cpsw_ale_set_vlan_entry_type(u32 *ale_entry,
 	}
 }
 
-int cpsw_ale_add_ucast(struct cpsw_ale *ale, u8 *addr, int port,
+int cpsw_ale_add_ucast(struct cpsw_ale *ale, const u8 *addr, int port,
 		       int flags, u16 vid)
 {
 	u32 ale_entry[ALE_ENTRY_WORDS] = {0, 0, 0};
@@ -372,7 +372,7 @@ int cpsw_ale_add_ucast(struct cpsw_ale *ale, u8 *addr, int port,
 }
 EXPORT_SYMBOL_GPL(cpsw_ale_add_ucast);
 
-int cpsw_ale_del_ucast(struct cpsw_ale *ale, u8 *addr, int port,
+int cpsw_ale_del_ucast(struct cpsw_ale *ale, const u8 *addr, int port,
 		       int flags, u16 vid)
 {
 	u32 ale_entry[ALE_ENTRY_WORDS] = {0, 0, 0};
@@ -388,7 +388,7 @@ int cpsw_ale_del_ucast(struct cpsw_ale *ale, u8 *addr, int port,
 }
 EXPORT_SYMBOL_GPL(cpsw_ale_del_ucast);
 
-int cpsw_ale_add_mcast(struct cpsw_ale *ale, u8 *addr, int port_mask,
+int cpsw_ale_add_mcast(struct cpsw_ale *ale, const u8 *addr, int port_mask,
 		       int flags, u16 vid, int mcast_state)
 {
 	u32 ale_entry[ALE_ENTRY_WORDS] = {0, 0, 0};
@@ -422,7 +422,7 @@ int cpsw_ale_add_mcast(struct cpsw_ale *ale, u8 *addr, int port_mask,
 }
 EXPORT_SYMBOL_GPL(cpsw_ale_add_mcast);
 
-int cpsw_ale_del_mcast(struct cpsw_ale *ale, u8 *addr, int port_mask,
+int cpsw_ale_del_mcast(struct cpsw_ale *ale, const u8 *addr, int port_mask,
 		       int flags, u16 vid)
 {
 	u32 ale_entry[ALE_ENTRY_WORDS] = {0, 0, 0};
@@ -1020,9 +1020,9 @@ static int cpsw_ale_dump_entry(struct cpsw_ale *ale, int idx, u32 *ale_entry,
 	return outlen;
 }
 
-static ssize_t cpsw_ale_control_show(struct device *dev,
-				     struct device_attribute *attr,
-				     char *buf)
+static ssize_t ale_control_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
 {
 	int i, port, len = 0, max_control = ARRAY_SIZE(ale_controls);
 	struct cpsw_ale *ale = control_attr_to_ale(attr);
@@ -1047,8 +1047,8 @@ static ssize_t cpsw_ale_control_show(struct device *dev,
 
 		/* global controls */
 		if (info->port_shift == 0 &&  info->port_offset == 0) {
-			if ((i >= ALE_PORT_UNKNOWN_VLAN_MEMBER) &&
-			    (i <= ALE_PORT_UNTAGGED_EGRESS))
+			if (i >= ALE_PORT_UNKNOWN_VLAN_MEMBER &&
+			    i <= ALE_PORT_UNTAGGED_EGRESS)
 				fmt = "%s=0x%x\n";
 
 			len += snprintf(buf + len, SZ_4K - len,
@@ -1068,9 +1068,9 @@ static ssize_t cpsw_ale_control_show(struct device *dev,
 	return len;
 }
 
-static ssize_t cpsw_ale_control_store(struct device *dev,
-				      struct device_attribute *attr,
-				      const char *buf, size_t count)
+static ssize_t ale_control_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t count)
 {
 	int port = 0, value, len, ret, control, max_control = ALE_NUM_CONTROLS;
 	struct cpsw_ale *ale = control_attr_to_ale(attr);
@@ -1122,12 +1122,11 @@ static ssize_t cpsw_ale_control_store(struct device *dev,
 
 	return count;
 }
-DEVICE_ATTR(ale_control, 0644,
-	    cpsw_ale_control_show, cpsw_ale_control_store);
+DEVICE_ATTR_RW(ale_control);
 
-static ssize_t cpsw_ale_table_show(struct device *dev,
-				   struct device_attribute *attr,
-				   char *buf)
+static ssize_t ale_table_show(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
 {
 	int not_shown = 0, total_outlen = 0, type, shown = 0;
 	struct cpsw_ale *ale = table_attr_to_ale(attr);
@@ -1211,8 +1210,8 @@ static struct ale_table_param oui_params[] = {
 	{ .name	= "addr", },
 };
 
-void cpsw_ale_table_store_init_params(
-	struct ale_table_param *params, int param_num)
+static void cpsw_ale_table_store_init_params(struct ale_table_param *params,
+					     int param_num)
 {
 	int i;
 
@@ -1548,16 +1547,15 @@ static ssize_t cpsw_ale_table_store_proc(struct cpsw_ale *ale,
 		return count;
 }
 
-static ssize_t cpsw_ale_table_store(struct device *dev,
-				    struct device_attribute *attr,
-				    const char *buf, size_t count)
+static ssize_t ale_table_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
 {
 	struct cpsw_ale *ale = table_attr_to_ale(attr);
 
 	return cpsw_ale_table_store_proc(ale, buf, count);
 }
-DEVICE_ATTR(ale_table, 0644,
-	    cpsw_ale_table_show, cpsw_ale_table_store);
+DEVICE_ATTR_RW(ale_table);
 
 static int cpsw_ale_dump_entry_raw(int idx, u32 *ale_entry, char *buf, int len)
 {
@@ -1580,8 +1578,8 @@ static int cpsw_ale_dump_entry_raw(int idx, u32 *ale_entry, char *buf, int len)
 	return outlen;
 }
 
-static ssize_t cpsw_ale_table_raw_show(struct device *dev,
-				       struct device_attribute *attr, char *buf)
+static ssize_t ale_table_raw_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
 {
 	struct cpsw_ale *ale = table_raw_attr_to_ale(attr);
 	int not_shown = 0, total_outlen = 0, shown = 0;
@@ -1624,9 +1622,9 @@ static ssize_t cpsw_ale_table_raw_show(struct device *dev,
 	return total_outlen;
 }
 
-static ssize_t cpsw_ale_table_raw_store(struct device *dev,
-					struct device_attribute *attr,
-					const char *buf, size_t count)
+static ssize_t ale_table_raw_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
 {
 	struct cpsw_ale *ale = table_raw_attr_to_ale(attr);
 	unsigned long end;
@@ -1642,12 +1640,11 @@ static ssize_t cpsw_ale_table_raw_store(struct device *dev,
 	/* add or delete command */
 	return cpsw_ale_table_store_proc(ale, buf, count);
 }
-DEVICE_ATTR(ale_table_raw, 0644,
-	    cpsw_ale_table_raw_show, cpsw_ale_table_raw_store);
+DEVICE_ATTR_RW(ale_table_raw);
 
-static void cpsw_ale_timer(unsigned long arg)
+static void cpsw_ale_timer(struct timer_list *t)
 {
-	struct cpsw_ale *ale = (struct cpsw_ale *)arg;
+	struct cpsw_ale *ale = from_timer(ale, t, timer);
 
 	cpsw_ale_control_set(ale, 0, ALE_AGEOUT, 1);
 
@@ -1661,9 +1658,9 @@ void cpsw_ale_start(struct cpsw_ale *ale)
 {
 	int ret, i;
 
-	if ((ale->version == ALE_VERSION_1R3) ||
-	    (ale->params.nu_switch_ale) ||
-	    (ale->version == ALE_VERSION_9R3)) {
+	if (ale->version == ALE_VERSION_1R3 ||
+	    ale->params.nu_switch_ale ||
+	    ale->version == ALE_VERSION_9R3) {
 		/* disable forwarding on all ports */
 		for (i = 0; i < ale->params.ale_ports; ++i)
 			cpsw_ale_control_set(ale, i, ALE_PORT_STATE,
@@ -1689,9 +1686,7 @@ void cpsw_ale_start(struct cpsw_ale *ale)
 	cpsw_ale_control_set(ale, 0, ALE_ENABLE, 1);
 	cpsw_ale_control_set(ale, 0, ALE_CLEAR, 1);
 
-	init_timer(&ale->timer);
-	ale->timer.data	    = (unsigned long)ale;
-	ale->timer.function = cpsw_ale_timer;
+	timer_setup(&ale->timer, cpsw_ale_timer, 0);
 	if (ale->ageout) {
 		ale->timer.expires = jiffies + ale->ageout;
 		add_timer(&ale->timer);
@@ -1704,9 +1699,9 @@ void cpsw_ale_stop(struct cpsw_ale *ale)
 {
 	del_timer_sync(&ale->timer);
 	cpsw_ale_control_set(ale, 0, ALE_ENABLE, 0);
-	if ((ale->version == ALE_VERSION_1R3) ||
-	    (ale->params.nu_switch_ale) ||
-	    (ale->version == ALE_VERSION_9R3)) {
+	if (ale->version == ALE_VERSION_1R3 ||
+	    ale->params.nu_switch_ale ||
+	    ale->version == ALE_VERSION_9R3) {
 		device_remove_file(ale->params.dev, &ale->ale_table_attr);
 		device_remove_file(ale->params.dev, &ale->ale_control_attr);
 		device_remove_file(ale->params.dev, &ale->ale_table_raw_attr);

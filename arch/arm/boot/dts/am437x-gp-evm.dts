@@ -89,7 +89,7 @@
 		};
 
 	lcd0: display {
-		compatible = "osddisplays,osd057T0559-34ts", "panel-dpi";
+		compatible = "osddisplays,osd070t1718-19ts", "panel-dpi";
 		label = "lcd";
 
 		backlight = <&lcd_bl>;
@@ -640,6 +640,12 @@
 	};
 };
 
+&uart0 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_pins_default>;
+};
+
 &i2c0 {
 	status = "okay";
 	pinctrl-names = "default";
@@ -649,7 +655,7 @@
 	tps65218: tps65218@24 {
 		reg = <0x24>;
 		compatible = "ti,tps65218";
-		interrupts = <GIC_SPI 7 IRQ_TYPE_NONE>; /* NMIn */
+		interrupts = <GIC_SPI 7 IRQ_TYPE_LEVEL_HIGH>; /* NMIn */
 		interrupt-controller;
 		#interrupt-cells = <2>;
 
@@ -896,7 +902,7 @@
 		compatible = "ti,wl1835";
 		reg = <2>;
 		interrupt-parent = <&gpio1>;
-		interrupts = <23 IRQ_TYPE_LEVEL_HIGH>;
+		interrupts = <23 IRQ_TYPE_EDGE_RISING>;
 	};
 };
 
@@ -1139,18 +1145,18 @@
 	ti,scale-data-fw = "am43x-evm-scale-data.bin";
 };
 
+&sgx {
+	status = "okay";
+};
+
 &pruss_soc_bus {
 	status = "okay";
 
-	pruss1: pruss@0 {
+	pruss1: pruss@54400000 {
 		status = "okay";
 	};
 
-	pruss0: pruss@40000 {
+	pruss0: pruss@54440000 {
 		status = "okay";
 	};
-};
-
-&sgx {
-	status = "okay";
 };

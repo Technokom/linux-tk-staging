@@ -1,16 +1,12 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /* Copyright 2011-2014 Autronica Fire and Security AS
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the Free
- * Software Foundation; either version 2 of the License, or (at your option)
- * any later version.
  *
  * Author(s):
  *	2011-2014 Arvid Brodin, arvid.brodin@alten.se
  */
 
-#ifndef __HSR_PRP_PRIVATE_H
-#define __HSR_PRP_PRIVATE_H
+#ifndef __HSR_PRP_MAIN_H
+#define __HSR_PRP_MAIN_H
 
 #include <linux/netdevice.h>
 #include <linux/list.h>
@@ -21,24 +17,21 @@
  * Table 8.
  * All values in milliseconds.
  */
-#define HSR_PRP_LIFE_CHECK_INTERVAL	 2000 /* ms */
-#define HSR_PRP_NODE_FORGET_TIME	60000 /* ms */
-#define HSR_PRP_ANNOUNCE_INTERVAL	  100 /* ms */
-
+#define HSR_PRP_LIFE_CHECK_INTERVAL		 2000 /* ms */
+#define HSR_PRP_NODE_FORGET_TIME		60000 /* ms */
+#define HSR_PRP_ANNOUNCE_INTERVAL		  100 /* ms */
 
 /* By how much may slave1 and slave2 timestamps of latest received frame from
  * each node differ before we notify of communication problem?
  */
-#define HSR_PRP_MAX_SLAVE_DIFF		 3000 /* ms */
-#define HSR_PRP_SEQNR_START		(USHRT_MAX - 1024)
+#define HSR_PRP_MAX_SLAVE_DIFF			 3000 /* ms */
+#define HSR_PRP_SEQNR_START			(USHRT_MAX - 1024)
 #define HSR_PRP_SUP_SEQNR_START		(HSR_PRP_SEQNR_START / 2)
-
 
 /* How often shall we check for broken ring and remove node entries older than
  * HSR_PRP_NODE_FORGET_TIME?
  */
-#define HSR_PRP_PRUNE_PERIOD		 3000 /* ms */
-
+#define HSR_PRP_PRUNE_PERIOD			 3000 /* ms */
 
 #define HSR_TLV_ANNOUNCE		   22
 #define HSR_TLV_LIFE_CHECK		   23
@@ -46,7 +39,6 @@
 #define PRP_TLV_LIFE_CHECK_DD		   20
 /* PRP V1 life check for Duplicate Accept */
 #define PRP_TLV_LIFE_CHECK_DA		   21
-
 
 /* HSR Tag.
  * As defined in IEC-62439-3:2010, the HSR tag is really { ethertype = 0x88FB,
@@ -94,9 +86,8 @@ static inline void set_hsr_tag_path(struct hsr_tag *ht, u16 path)
 
 static inline void set_hsr_tag_LSDU_size(struct hsr_tag *ht, u16 LSDU_size)
 {
-	ht->path_and_LSDU_size = htons(
-			(ntohs(ht->path_and_LSDU_size) & 0xF000) |
-			(LSDU_size & 0x0FFF));
+	ht->path_and_LSDU_size = htons((ntohs(ht->path_and_LSDU_size) &
+				       0xF000) | (LSDU_size & 0x0FFF));
 }
 
 struct hsr_ethhdr {
@@ -120,23 +111,22 @@ struct hsr_prp_sup_tag {
 } __packed;
 
 struct hsr_prp_sup_payload {
-	unsigned char	mac_address_a[ETH_ALEN];
+	unsigned char	macaddress_A[ETH_ALEN];
 } __packed;
 
 static inline u16 get_hsr_stag_path(struct hsr_prp_sup_tag *hst)
 {
-	return get_hsr_tag_path((struct hsr_tag *) hst);
+	return get_hsr_tag_path((struct hsr_tag *)hst);
 }
 
 static inline u16 get_hsr_stag_HSR_ver(struct hsr_prp_sup_tag *hst)
 {
-	return get_hsr_tag_LSDU_size((struct hsr_tag *) hst);
+	return get_hsr_tag_LSDU_size((struct hsr_tag *)hst);
 }
 
-static inline void set_hsr_stag_path(struct hsr_prp_sup_tag *hst,
-				     u16 path)
+static inline void set_hsr_stag_path(struct hsr_prp_sup_tag *hst, u16 path)
 {
-	set_hsr_tag_path((struct hsr_tag *) hst, path);
+	set_hsr_tag_path((struct hsr_tag *)hst, path);
 }
 
 static inline void set_hsr_stag_HSR_ver(struct hsr_prp_sup_tag *hst,
@@ -197,9 +187,8 @@ static inline u16 get_prp_LSDU_size(struct prp_rct *rct)
 
 static inline void set_prp_lan_id(struct prp_rct *rct, u16 lan_id)
 {
-	rct->lan_id_and_LSDU_size = htons(
-			(ntohs(rct->lan_id_and_LSDU_size) & 0x0FFF) |
-			(lan_id << 12));
+	rct->lan_id_and_LSDU_size = htons((ntohs(rct->lan_id_and_LSDU_size) &
+					  0x0FFF) | (lan_id << 12));
 }
 static inline void set_prp_LSDU_size(struct prp_rct *rct, u16 LSDU_size)
 {
@@ -210,6 +199,8 @@ static inline void set_prp_LSDU_size(struct prp_rct *rct, u16 LSDU_size)
 
 struct hsr_prp_debug_stats {
 	u32	cnt_tx_sup;
+	u32	cnt_rx_sup_a;
+	u32	cnt_rx_sup_b;
 };
 
 struct hsr_prp_port {
@@ -221,7 +212,6 @@ struct hsr_prp_port {
 
 #define HSR	0
 #define PRP	1
-
 struct hsr_prp_priv {
 	struct rcu_head		rcu_head;
 	struct list_head	ports;
@@ -229,17 +219,18 @@ struct hsr_prp_priv {
 	struct list_head	self_node_db;	/* MACs of slaves */
 	struct timer_list	announce_timer;	/* Supervision frame dispatch */
 	struct timer_list	prune_timer;
-	bool			rx_offloaded;	/* lre handle in hw */
-	bool			l2_fwd_offloaded; /* L2 forward in hw */
+	unsigned int		rx_offloaded : 1;   /* lre handle in hw */
+	unsigned int		l2_fwd_offloaded : 1; /* L2 forward in hw */
 	struct	hsr_prp_debug_stats dbg_stats;	/* debug stats */
 	struct	lre_stats lre_stats;	/* lre interface stats */
 	int announce_count;
 	u16 sequence_nr;
 	u16 sup_sequence_nr;	/* For HSRv1 separate seq_nr for supervision */
+	u8 prot_version;		/* Indicate if HSRv0 or HSRv1. */
+	spinlock_t seqnr_lock;			/* locking for sequence_nr */
 #define HSR_V0	0
 #define HSR_V1	1
 #define PRP_V1	2
-	u8 prot_ver;		/* Indicate if HSRv0 or HSRv1 or PRPv1 */
 #define PRP_LAN_ID	0x5     /* 0x1010 for A and 0x1011 for B. Bit 0 is set
 				 * based on SLAVE_A or SLAVE_B
 				 */
@@ -262,7 +253,6 @@ struct hsr_prp_priv {
 	/* Clear Node Table command */
 	enum iec62439_3_clear_nt_cmd clear_nt_cmd;
 	u32 dlrmt;	/* duplicate list reside max time */
-	spinlock_t seqnr_lock;	/* locking for sequence_nr */
 	unsigned char		sup_multicast_addr[ETH_ALEN];
 #ifdef	CONFIG_DEBUG_FS
 	struct dentry *root_dir;
@@ -281,14 +271,11 @@ struct hsr_prp_priv {
 #endif
 };
 
-#define hsr_prp_for_each_port(hsr_prp, port) \
-	list_for_each_entry_rcu((port), &(hsr_prp)->ports, port_list)
+#define hsr_prp_for_each_port(priv, port) \
+	list_for_each_entry_rcu((port), &(priv)->ports, port_list)
 
-struct hsr_prp_port *hsr_prp_get_port(struct hsr_prp_priv *hsr_prp,
+struct hsr_prp_port *hsr_prp_get_port(struct hsr_prp_priv *priv,
 				      enum hsr_prp_port_type pt);
-int hsr_prp_netdev_notify(struct notifier_block *nb, unsigned long event,
-			  void *ptr);
-
 
 /* Caller must ensure skb is a valid HSR frame */
 static inline u16 hsr_get_skb_sequence_nr(struct sk_buff *skb)
@@ -347,31 +334,32 @@ int hsr_prp_register_notifier(u8 proto);
 void hsr_prp_unregister_notifier(u8 proto);
 
 #define INC_CNT_TX_AB(type, priv) (((type) == HSR_PRP_PT_SLAVE_A) ? \
-		priv->lre_stats.cnt_tx_a++ : \
-		priv->lre_stats.cnt_tx_b++)
-#define INC_CNT_TX_C(priv) (priv->lre_stats.cnt_tx_c++)
+		(priv)->lre_stats.cnt_tx_a++ : \
+		(priv)->lre_stats.cnt_tx_b++)
+#define INC_CNT_TX_C(priv) ((priv)->lre_stats.cnt_tx_c++)
 #define INC_CNT_RX_WRONG_LAN_AB(type, priv) (((type) == HSR_PRP_PT_SLAVE_A) ? \
-		priv->lre_stats.cnt_errwronglan_a++ : \
-		priv->lre_stats.cnt_errwronglan_b++)
+		(priv)->lre_stats.cnt_errwronglan_a++ : \
+		(priv)->lre_stats.cnt_errwronglan_b++)
 #define INC_CNT_RX_AB(type, priv) (((type) == HSR_PRP_PT_SLAVE_A) ? \
-		priv->lre_stats.cnt_rx_a++ : \
-		priv->lre_stats.cnt_rx_b++)
-#define INC_CNT_RX_C(priv) (priv->lre_stats.cnt_rx_c++)
+		(priv)->lre_stats.cnt_rx_a++ : \
+		(priv)->lre_stats.cnt_rx_b++)
+#define INC_CNT_RX_C(priv) ((priv)->lre_stats.cnt_rx_c++)
 #define INC_CNT_RX_ERROR_AB(type, priv) (((type) == HSR_PRP_PT_SLAVE_A) ? \
-		priv->lre_stats.cnt_errors_a++ : \
-		priv->lre_stats.cnt_errors_b++)
+		(priv)->lre_stats.cnt_errors_a++ : \
+		(priv)->lre_stats.cnt_errors_b++)
 #define INC_CNT_OWN_RX_AB(type, priv) (((type) == HSR_PRP_PT_SLAVE_A) ? \
-		priv->lre_stats.cnt_own_rx_a++ : \
-		priv->lre_stats.cnt_own_rx_b++)
+		(priv)->lre_stats.cnt_own_rx_a++ : \
+		(priv)->lre_stats.cnt_own_rx_b++)
 #define INC_CNT_TX_SUP(priv) ((priv)->dbg_stats.cnt_tx_sup++)
+#define INC_CNT_RX_SUP_A(priv) ((priv)->dbg_stats.cnt_rx_sup_a++)
+#define INC_CNT_RX_SUP_B(priv) ((priv)->dbg_stats.cnt_rx_sup_b++)
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
-int hsr_prp_debugfs_init(struct hsr_prp_priv *priv,
-			 struct net_device *hsr_prp_dev);
+int hsr_prp_debugfs_init(struct hsr_prp_priv *priv, struct net_device *ndev);
 void hsr_prp_debugfs_term(struct hsr_prp_priv *priv);
 #else
 static inline int hsr_prp_debugfs_init(struct hsr_prp_priv *priv,
-				       struct net_device *hsr_prp_dev)
+				       struct net_device *ndev)
 {
 	return 0;
 }
@@ -404,4 +392,4 @@ int hsr_prp_lredev_get_node_table(struct hsr_prp_priv *priv,
 				  int size);
 int  hsr_prp_lredev_get_lre_stats(struct hsr_prp_priv *priv,
 				  struct lre_stats *stats);
-#endif /*  __HSR_PRP_PRIVATE_H */
+#endif /*  __HSR_PRP_MAIN_H */

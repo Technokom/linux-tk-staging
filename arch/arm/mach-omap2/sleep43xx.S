@@ -1,17 +1,9 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Low level suspend code for AM43XX SoCs
  *
- * Copyright (C) 2013-2017 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2013-2018 Texas Instruments Incorporated - http://www.ti.com/
  *	Dave Gerlach, Vaibhav Bedia
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation version 2.
- *
- * This program is distributed "as is" WITHOUT ANY WARRANTY of any
- * kind, whether express or implied; without even the implied warranty
- * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <generated/ti-pm-asm-offsets.h>
@@ -29,6 +21,9 @@
 #include "omap44xx.h"
 #include "prm33xx.h"
 #include "prcm43xx.h"
+
+/* replicated define because linux/bitops.h cannot be included in assembly */
+#define BIT(nr)			(1 << (nr))
 
 #define AM33XX_CM_CLKCTRL_MODULESTATE_DISABLED		0x00030000
 #define AM33XX_CM_CLKCTRL_MODULEMODE_DISABLE		0x0003
@@ -53,9 +48,6 @@
 					AM43XX_CM_PER_EMIF_CLKCTRL_OFFSET)
 #define AM43XX_PRM_EMIF_CTRL_OFFSET			0x0030
 
-/* replicated define because linux/bitops.h cannot be included in assembly */
-#define BIT(nr)				(1 << (nr))
-
 #define RTC_SECONDS_REG					0x0
 #define RTC_PMIC_REG					0x98
 #define RTC_PMIC_POWER_EN				BIT(16)
@@ -75,10 +67,12 @@ ENTRY(am43xx_do_wfi)
 	ldr	r2, [r3, #AMX3_PM_RO_SRAM_DATA_VIRT_OFFSET]
 	str	r4, [r2, #AMX3_PM_WFI_FLAGS_OFFSET]
 
+#ifdef CONFIG_CACHE_L2X0
 	/* Retrieve l2 cache virt address BEFORE we shut off EMIF */
 	ldr	r1, get_l2cache_base
 	blx	r1
 	mov	r8, r0
+#endif
 
 	/* Only flush cache is we know we are losing MPU context */
 	tst	r4, #WFI_FLAG_FLUSH_CACHE
@@ -374,6 +368,9 @@ wait_emif_enable1:
 	mov     r1, #AM43XX_EMIF_POWEROFF_DISABLE
 	str     r1, [r2, #0x0]
 
+	ldr     r1, [r9, #EMIF_PM_RUN_HW_LEVELING]
+	blx     r1
+
 #ifdef CONFIG_CACHE_L2X0
 	ldr	r2, l2_cache_base
 	ldr	r0, [r2, #L2X0_CTRL]
@@ -437,8 +434,6 @@ ENDPROC(am43xx_resume_from_deep_sleep)
  * Local variables
  */
 	.align
-get_l2cache_base:
-	.word	omap4_get_l2cache_base
 kernel_flush:
 	.word   v7_flush_dcache_all
 ddr_start:
@@ -457,7 +452,10 @@ am43xx_phys_emif_clkctrl:
 	.word	(AM43XX_CM_BASE + AM43XX_CM_PER_INST + \
 		 AM43XX_CM_PER_EMIF_CLKCTRL_OFFSET)
 
+#ifdef CONFIG_CACHE_L2X0
 /* L2 cache related defines for AM437x */
+get_l2cache_base:
+	.word	omap4_get_l2cache_base
 l2_cache_base:
 	.word	OMAP44XX_L2CACHE_BASE
 l2_smc1:
@@ -468,6 +466,7 @@ l2_smc3:
 	.word	OMAP4_MON_L2X0_CTRL_INDEX
 l2_val:
 	.word	0xffff
+#endif
 
 .align 3
 /* DDR related defines */
@@ -475,13 +474,14 @@ ENTRY(am43xx_emif_sram_table)
 	.space EMIF_PM_FUNCTIONS_SIZE
 
 ENTRY(am43xx_pm_sram)
-.word am43xx_do_wfi
-.word am43xx_do_wfi_sz
-.word am43xx_resume_offset
-.word am43xx_emif_sram_table
-.word am43xx_pm_ro_sram_data
+	.word am43xx_do_wfi
+	.word am43xx_do_wfi_sz
+	.word am43xx_resume_offset
+	.word am43xx_emif_sram_table
+	.word am43xx_pm_ro_sram_data
+
 resume_addr:
-	.word	cpu_resume - PAGE_OFFSET + 0x80000000
+	.word   cpu_resume - PAGE_OFFSET + 0x80000000
 .align 3
 
 ENTRY(am43xx_pm_ro_sram_data)

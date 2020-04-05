@@ -1,21 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Device Tree Source for K2G EVM
  *
- * Copyright (C) 2016 Texas Instruments Incorporated - http://www.ti.com/
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed "as is" WITHOUT ANY WARRANTY of any
- * kind, whether express or implied; without even the implied warranty
- * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Copyright (C) 2016-2017 Texas Instruments Incorporated - http://www.ti.com/
  */
 /dts-v1/;
 
 #include <dt-bindings/sound/ti-mcasp.h>
-#include <dt-bindings/sound/sii9022-audio.h>
+#include <dt-bindings/sound/sii902x-audio.h>
 #include "keystone-k2g.dtsi"
 
 / {
@@ -47,12 +39,6 @@
 		};
 	};
 
-	aliases {
-		display0 = &hdmi;
-
-		sound0 = &sound0;
-	};
-
 	vcc3v3_dcin_reg: fixedregulator-vcc3v3-dcin {
 		compatible = "regulator-fixed";
 		regulator-name = "mmc0_fixed";
@@ -61,18 +47,15 @@
 		regulator-always-on;
 	};
 
+	vcc1v8_ldo1_reg: fixedregulator-vcc1v8-ldo1 {
+		compatible = "regulator-fixed";
+		regulator-name = "ldo1";
+	};
+
 	/* This is actually coming from TPS659118:LDO2_1V8 */
 	vcc1v8_aud_reg: fixedregulator-vcc1v8-aud {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc1v8_aud_fixed";
-		regulator-min-microvolt = <1800000>;
-		regulator-max-microvolt = <1800000>;
-		regulator-always-on;
-	};
-
-	vcc1v8_ldo1_reg: fixedregulator-vcc1v8-ldo1 {
-		compatible = "regulator-fixed";
-		regulator-name = "ldo1";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
 		regulator-always-on;
@@ -135,6 +118,12 @@
 			};
 		};
 	};
+
+	sii9022_mclk: sii9022_mclk {
+               compatible = "fixed-clock";
+               #clock-cells = <0>;
+               clock-frequency = <12288000>;
+       };
 };
 
 &k2g_pinctrl {
@@ -220,6 +209,44 @@
 		>;
 	};
 
+	dcan0_pins: pinmux_dcan0_pins {
+		pinctrl-single,pins = <
+			K2G_CORE_IOPAD(0x11fc) (BUFFER_CLASS_B | PULL_DISABLE  | MUX_MODE0)	/* dcan0tx.dcan0tx */
+			K2G_CORE_IOPAD(0x1200) (BUFFER_CLASS_B | PIN_PULLDOWN  | MUX_MODE0)	/* dcan0rx.dcan0rx */
+		>;
+	};
+
+	dcan1_pins: pinmux_dcan1_pins {
+		pinctrl-single,pins = <
+			K2G_CORE_IOPAD(0x1224) (BUFFER_CLASS_B | PULL_DISABLE  | MUX_MODE1)	/* qspicsn2.dcan1tx */
+			K2G_CORE_IOPAD(0x1228) (BUFFER_CLASS_B | PIN_PULLDOWN  | MUX_MODE1)	/* qspicsn3.dcan1rx */
+		>;
+	};
+
+	emac_pins: pinmux_emac_pins {
+		pinctrl-single,pins = <
+			K2G_CORE_IOPAD(0x113C) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_RXD1.RGMII_RXD1 */
+			K2G_CORE_IOPAD(0x1138) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_RXD2.RGMII_RXD2 */
+			K2G_CORE_IOPAD(0x1134) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_RXD3.RGMII_RXD3 */
+			K2G_CORE_IOPAD(0x1140) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_RXD0.RGMII_RXD0 */
+			K2G_CORE_IOPAD(0x1178) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_TXD0.RGMII_TXD0 */
+			K2G_CORE_IOPAD(0x1174) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_TXD1.RGMII_TXD1 */
+			K2G_CORE_IOPAD(0x1170) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_TXD2.RGMII_TXD2 */
+			K2G_CORE_IOPAD(0x116C) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_TXD3.RGMII_TXD3 */
+			K2G_CORE_IOPAD(0x1154) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_TXCLK.RGMII_TXC */
+			K2G_CORE_IOPAD(0x117C) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_TXEN.RGMII_TXCTL */
+			K2G_CORE_IOPAD(0x1120) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_RXCLK.RGMII_RXC */
+			K2G_CORE_IOPAD(0x1144) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_RXDV.RGMII_RXCTL */
+		>;
+	};
+
+	mdio_pins: pinmux_mdio_pins {
+		pinctrl-single,pins = <
+			K2G_CORE_IOPAD(0x118C) (BUFFER_CLASS_B | PULL_DISABLE | MUX_MODE0)	/* MDIO_CLK.MDIO_CLK */
+			K2G_CORE_IOPAD(0x1188) (BUFFER_CLASS_B | PULL_DISABLE | MUX_MODE0)	/* MDIO_DATA.MDIO_DATA */
+		>;
+	};
+
 	vout_pins: pinmux_vout_pins {
 		pinctrl-single,pins = <
 			K2G_CORE_IOPAD(0x1078) (BUFFER_CLASS_B | PULL_DISABLE | MUX_MODE0) /* dssdata23.dssdata23 */
@@ -260,44 +287,6 @@
 			K2G_CORE_IOPAD(0x1238) (BUFFER_CLASS_B | PIN_PULLDOWN | MUX_MODE4)	/* pr0_pru_gpo3.mcasp2_axr3 */
 			K2G_CORE_IOPAD(0x1254) (BUFFER_CLASS_B | PIN_PULLDOWN | MUX_MODE4)	/* pr0_pru_gpo10.mcasp2_afsx */
 			K2G_CORE_IOPAD(0x125c) (BUFFER_CLASS_B | PIN_PULLDOWN | MUX_MODE4)	/* pr0_pru_gpo12.mcasp2_aclkx */
-		>;
-	};
-
-	emac_pins: pinmux_emac_pins {
-		pinctrl-single,pins = <
-			K2G_CORE_IOPAD(0x113C) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_RXD1.RGMII_RXD1 */
-			K2G_CORE_IOPAD(0x1138) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_RXD2.RGMII_RXD2 */
-			K2G_CORE_IOPAD(0x1134) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_RXD3.RGMII_RXD3 */
-			K2G_CORE_IOPAD(0x1140) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_RXD0.RGMII_RXD0 */
-			K2G_CORE_IOPAD(0x1178) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_TXD0.RGMII_TXD0 */
-			K2G_CORE_IOPAD(0x1174) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_TXD1.RGMII_TXD1 */
-			K2G_CORE_IOPAD(0x1170) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_TXD2.RGMII_TXD2 */
-			K2G_CORE_IOPAD(0x116C) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_TXD3.RGMII_TXD3 */
-			K2G_CORE_IOPAD(0x1154) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_TXCLK.RGMII_TXC */
-			K2G_CORE_IOPAD(0x117C) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_TXEN.RGMII_TXCTL */
-			K2G_CORE_IOPAD(0x1120) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_RXCLK.RGMII_RXC */
-			K2G_CORE_IOPAD(0x1144) (BUFFER_CLASS_D | PULL_DISABLE | MUX_MODE1)	/* MII_RXDV.RGMII_RXCTL */
-		>;
-	};
-
-	mdio_pins: pinmux_mdio_pins {
-		pinctrl-single,pins = <
-			K2G_CORE_IOPAD(0x118C) (BUFFER_CLASS_B | PULL_DISABLE | MUX_MODE0)	/* MDIO_CLK.MDIO_CLK */
-			K2G_CORE_IOPAD(0x1188) (BUFFER_CLASS_B | PULL_DISABLE | MUX_MODE0)	/* MDIO_DATA.MDIO_DATA */
-		>;
-	};
-
-	dcan0_pins: pinmux_dcan0_pins {
-		pinctrl-single,pins = <
-			K2G_CORE_IOPAD(0x11fc) (BUFFER_CLASS_B | PULL_DISABLE  | MUX_MODE0)	/* dcan0tx.dcan0tx */
-			K2G_CORE_IOPAD(0x1200) (BUFFER_CLASS_B | PIN_PULLDOWN  | MUX_MODE0)	/* dcan0rx.dcan0rx */
-		>;
-	};
-
-	dcan1_pins: pinmux_dcan1_pins {
-		pinctrl-single,pins = <
-			K2G_CORE_IOPAD(0x1224) (BUFFER_CLASS_B | PULL_DISABLE  | MUX_MODE1)	/* qspicsn2.dcan1tx */
-			K2G_CORE_IOPAD(0x1228) (BUFFER_CLASS_B | PIN_PULLDOWN  | MUX_MODE1)	/* qspicsn3.dcan1rx */
 		>;
 	};
 };
@@ -465,6 +454,47 @@
 	status = "okay";
 };
 
+&dcan0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&dcan0_pins>;
+	status = "okay";
+};
+
+&dcan1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&dcan1_pins>;
+	status = "okay";
+};
+
+&qmss {
+	status = "okay";
+};
+
+&knav_dmas {
+	status = "okay";
+};
+
+&mdio {
+	pinctrl-names = "default";
+	pinctrl-0 = <&mdio_pins>;
+	status = "okay";
+	ethphy0: ethernet-phy@0 {
+		reg = <0>;
+	};
+};
+
+&gbe0 {
+	phy-handle = <&ethphy0>;
+	phy-mode = "rgmii-id";
+	status = "okay";
+};
+
+&netcp {
+	pinctrl-names = "default";
+	pinctrl-0 = <&emac_pins>;
+	status = "okay";
+};
+
 &i2c1 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&i2c1_pins>;
@@ -482,6 +512,7 @@
 			0
 			0
 		>;
+		clocks = <&sii9022_mclk>;
 
 		ports {
 			#address-cells = <1>;
@@ -557,45 +588,4 @@
 	>;
 	tx-num-evt = <32>;
 	rx-num-evt = <32>;
-};
-
-&qmss {
-	status = "okay";
-};
-
-&knav_dmas {
-	status = "okay";
-};
-
-&mdio {
-	pinctrl-names = "default";
-	pinctrl-0 = <&mdio_pins>;
-	status = "okay";
-	ethphy0: ethernet-phy@0 {
-		reg = <0>;
-	};
-};
-
-&gbe0 {
-	phy-handle = <&ethphy0>;
-	phy-mode = "rgmii-id";
-	status = "okay";
-};
-
-&netcp {
-	pinctrl-names = "default";
-	pinctrl-0 = <&emac_pins>;
-	status = "okay";
-};
-
-&dcan0 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&dcan0_pins>;
-	status = "okay";
-};
-
-&dcan1 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&dcan1_pins>;
-	status = "okay";
 };

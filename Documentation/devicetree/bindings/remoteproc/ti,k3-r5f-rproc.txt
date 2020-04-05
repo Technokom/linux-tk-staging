@@ -1,14 +1,14 @@
-TI K3 MCU R5F devices
-======================
+TI K3 R5F processor subsystems
+==============================
 
-The TI K3 family of SoCs usually have one or more micro-controller (MCU)
-sub-systems comprising of a Dual-Core Cortex R5F cluster. The dual core
-cluster can be used either in a LockStep mode providing safety/fault
-tolerance features or in a Split mode providing two individual compute
-cores for doubling the compute capacity. These are used together with
-other processors present on the SoC to achieve various system level goals.
+The TI K3 family of SoCs usually have one or more dual-core Arm Cortex
+R5F processor subsystems/clusters (R5FSS). The dual core cluster can be
+used either in a LockStep mode providing safety/fault tolerance features
+or in a Split mode providing two individual compute cores for doubling
+the compute capacity. These are used together with other processors
+present on the SoC to achieve various system level goals.
 
-MCU Sub-System Device Node:
+R5F Sub-System Device Node:
 ===========================
 Each Dual-Core R5F sub-system is represented as a single DTS node representing
 the cluster, with a pair of child DT nodes representing the individual R5F
@@ -21,10 +21,12 @@ Required properties:
 The following are the mandatory properties:
 
 - compatible:		Should be one of the following,
-			    "ti,am654-mcu-r5f" for MCU R5F clusters on
+			    "ti,am654-r5fss" for R5F clusters/subsystems on
 			                       K3 AM65x SoCs
+			    "ti,j721e-r5fss" for R5F clusters/subsystems on
+			                       K3 J721E SoCs
 - power-domains:	Should contain a phandle to a PM domain provider node
-			and an args specifier containing the DSP device id
+			and an args specifier containing the R5FSS device id
 			value. This property is as per the binding,
 			Documentation/devicetree/bindings/soc/ti/sci-pm-domain.txt
 - #address-cells:	Should be 1
@@ -34,15 +36,15 @@ The following are the mandatory properties:
 
 Optional properties:
 --------------------
-- lockstep-mode:	Configuration Mode for the Dual R5F cores within the MCU
+- lockstep-mode:	Configuration Mode for the Dual R5F cores within the R5F
 			cluster. Should be either a value of 1 (LockStep mode) or
 			0 (Split mode), default is LockStep mode if omitted.
 
 
 R5F Processor Child Nodes:
 ==========================
-The MCU Sub-System device node should define two R5F child nodes, each node
-representing a TI instantiation of the ARM Cortex R5F core. There are some
+The R5F Sub-System device node should define two R5F child nodes, each node
+representing a TI instantiation of the Arm Cortex R5F core. There are some
 specific integration differences for the IP like the usage of a Region Address
 Translator (RAT) for translating the larger SoC bus addresses into a 32-bit
 address space for the processor.
@@ -53,6 +55,7 @@ The following are the mandatory properties:
 
 - compatible:		Should be one of the following,
 			    "ti,am654-r5f" for the R5F cores in K3 AM65x SoCs
+			    "ti,j721e-r5f" for the R5F cores in K3 J721E SOCs
 - reg:			Should contain an entry for each value in 'reg-names'.
 			Each entry should have the memory region's start address
 			and the size of the region, the representation matching
@@ -76,10 +79,10 @@ The following are the mandatory properties:
 			specifier. Please refer to the following reset bindings
 			for the reset argument specifier,
 			Documentation/devicetree/bindings/reset/ti,sci-reset.txt
-			    for AM65x SoCs
+			    for AM65x and J721E SoCs
 
 The following properties are mandatory for R5F Core0 in both LockStep and Split
-modes, but are mandatory for R5F Core1 in only Split mode. They are unused for
+modes, and are mandatory for R5F Core1 _only_ in Split mode. They are unused for
 R5F Core1 in LockStep mode:
 
 - mboxes:		OMAP Mailbox specifier denoting the sub-mailbox, to be
@@ -126,7 +129,7 @@ Example:
 1. AM654 SoC
 	/* AM65x remoteproc alias */
 	aliases {
-		rproc0 = &mcu_r5f0;
+		rproc0 = &mcu_r5fss0_core0;
 	};
 
 	/* R5F DDR Carveout reserved memory nodes */
@@ -135,86 +138,102 @@ Example:
 		#size-cells = <2>;
 		ranges;
 
-		r5f1_dma_memory_region: r5f1-dma-memory@9b000000 {
+		mcu_r5fss0_core1_dma_memory_region: r5f-dma-memory@9b000000 {
 			compatible = "shared-dma-pool";
-			reg = <0 0x9b000000 0 0x100000>;
+			reg = <0x00 0x9b000000 0x00 0x100000>;
 			no-map;
 		};
 
-		r5f1_memory_region: r5f1-memory@9b100000 {
+		mcu_r5fss0_core1_memory_region: r5f-memory@9b100000 {
 			compatible = "shared-dma-pool";
-			reg = <0 0x9b100000 0 0xf00000>;
+			reg = <0x00 0x9b100000 0x00 0xf00000>;
 			no-map;
 		};
 
-		r5f0_dma_memory_region: r5f0-dma-memory@9c000000 {
+		mcu_r5fss0_core0_dma_memory_region: r5f-dma-memory@9c000000 {
 			compatible = "shared-dma-pool";
-			reg = <0 0x9c000000 0 0x100000>;
+			reg = <0x00 0x9c000000 0x00 0x100000>;
 			no-map;
 		};
 
-		r5f0_memory_region: r5f0-memory@9c100000 {
+		mcu_r5fss0_core0_memory_region: r5f-memory@9c100000 {
 			compatible = "shared-dma-pool";
-			reg = <0 0x9c100000 0 0x700000>;
+			reg = <0x00 0x9c100000 0x00 0x700000>;
 			no-map;
 		};
 	};
 
-	/* MCU domain SRAM node */
-	mcu_ram: mcu-ram@41c00000 {
-		compatible = "mmio-sram";
-		reg = <0x0 0x41c00000 0x0 0x80000>;
-		ranges = <0x0 0x0 0x41c00000 0x80000>;
-		#address-cells = <1>;
-		#size-cells = <1>;
+	cbass_main: interconnect@100000 {
+		compatible = "simple-bus";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges = <0x00 0x41000000 0x00 0x41000000 0x00 0x00020000>,
+			 <0x00 0x41400000 0x00 0x41400000 0x00 0x00020000>,
+			 <0x00 0x41c00000 0x00 0x41c00000 0x00 0x00080000>;
 
-		r5f0_sram: r5f0-sram@0 {
-			reg = <0x0 0x40000>;
-		};
-	};
+		cbass_mcu: interconnect@28380000 {
+			compatible = "simple-bus";
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges = <0x00 0x41000000 0x00 0x41000000 0x00 0x00020000>, /* MCU R5F Core0 */
+				 <0x00 0x41400000 0x00 0x41400000 0x00 0x00020000>, /* MCU R5F Core1 */
+				 <0x00 0x41c00000 0x00 0x41c00000 0x00 0x00080000>; /* MCU SRAM */
 
-	/* AM65x MCU Cluster node */
-	soc {
-		mcu_r5f_cluster: mcu_r5f_cluster@41000000 {
-			compatible = "ti,am654-mcu-r5f";
-			power-domains = <&k3_pds 129>;
-			lockstep-mode = <1>;
-			#address-cells = <1>;
-			#size-cells = <1>;
-			ranges = <0x41000000 0x0 0x41000000 0x20000>,
-				 <0x41400000 0x0 0x41400000 0x20000>;
+			/* MCU domain SRAM node */
+			mcu_ram: mcu-ram@41c00000 {
+				compatible = "mmio-sram";
+				reg = <0x00 0x41c00000 0x00 0x80000>;
+				ranges = <0x0 0x00 0x41c00000 0x80000>;
+				#address-cells = <1>;
+				#size-cells = <1>;
 
-			mcu_r5f0: r5f@41000000 {
-				compatible = "ti,am654-r5f";
-				reg = <0x41000000 0x00008000>,
-				      <0x41010000 0x00008000>;
-				reg-names = "atcm", "btcm";
-				ti,sci = <&dmsc>;
-				ti,sci-dev-id = <159>;
-				ti,sci-proc-ids = <0x01 0xFF>;
-				resets = <&k3_reset 159 1>;
-				atcm-enable = <1>;
-				btcm-enable = <1>;
-				loczrama = <1>;
-				mboxes = <&mailbox0 &mbox_mcu_r5f0_ipc3x>;
-				memory-region = <&r5f0_dma_memory_region>,
-						<&r5f0_memory_region>;
-				sram = <&r5f0_sram>;
+				mcu_r5fss0_core0_sram: r5f-sram@0 {
+					reg = <0x0 0x40000>;
+				};
 			};
 
-			mcu_r5f1: r5f@41400000 {
-				compatible = "ti,am654-r5f";
-				reg = <0x41400000 0x00008000>,
-				      <0x41410000 0x00008000>;
-				reg-names = "atcm", "btcm";
-				ti,sci = <&dmsc>;
-				ti,sci-dev-id = <245>;
-				ti,sci-proc-ids = <0x02 0xFF>;
-				resets = <&k3_reset 245 1>;
-				atcm-enable = <1>;
-				btcm-enable = <1>;
-				loczrama = <1>;
-				mboxes = <&mailbox1 &mbox_mcu_r5f1_ipc3x>;
+			/* AM65x MCU R5FSS node */
+			mcu_r5fss0: r5fss@41000000 {
+				compatible = "ti,am654-r5fss";
+				power-domains = <&k3_pds 129>;
+				lockstep-mode = <1>;
+				#address-cells = <1>;
+				#size-cells = <1>;
+				ranges = <0x41000000 0x00 0x41000000 0x20000>,
+					 <0x41400000 0x00 0x41400000 0x20000>;
+
+				mcu_r5f0: r5f@41000000 {
+					compatible = "ti,am654-r5f";
+					reg = <0x41000000 0x00008000>,
+					      <0x41010000 0x00008000>;
+					reg-names = "atcm", "btcm";
+					ti,sci = <&dmsc>;
+					ti,sci-dev-id = <159>;
+					ti,sci-proc-ids = <0x01 0xFF>;
+					resets = <&k3_reset 159 1>;
+					atcm-enable = <1>;
+					btcm-enable = <1>;
+					loczrama = <1>;
+					mboxes = <&mailbox0 &mbox_mcu_r5fss0_core0>;
+					memory-region = <&mcu_r5fss0_core0_dma_memory_region>,
+							<&mcu_r5fss0_core0_memory_region>;
+					sram = <&mcu_r5fss0_core0_sram>;
+				};
+
+				mcu_r5f1: r5f@41400000 {
+					compatible = "ti,am654-r5f";
+					reg = <0x41400000 0x00008000>,
+					      <0x41410000 0x00008000>;
+					reg-names = "atcm", "btcm";
+					ti,sci = <&dmsc>;
+					ti,sci-dev-id = <245>;
+					ti,sci-proc-ids = <0x02 0xFF>;
+					resets = <&k3_reset 245 1>;
+					atcm-enable = <1>;
+					btcm-enable = <1>;
+					loczrama = <1>;
+					mboxes = <&mailbox1 &mbox_mcu_r5fss0_core1>;
+				};
 			};
 		};
 	};

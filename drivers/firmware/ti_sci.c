@@ -1,17 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Texas Instruments System Control Interface Protocol Driver
  *
  * Copyright (C) 2015-2016 Texas Instruments Incorporated - http://www.ti.com/
  *	Nishanth Menon
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed "as is" WITHOUT ANY WARRANTY of any
- * kind, whether express or implied; without even the implied warranty
- * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
@@ -73,18 +65,36 @@ struct ti_sci_xfers_info {
 };
 
 /**
+ * struct ti_sci_rm_type_map - Structure representing TISCI Resource
+ *				management representation of dev_ids.
+ * @dev_id:	TISCI device ID
+ * @type:	Corresponding id as identified by TISCI RM.
+ *
+ * Note: This is used only as a work around for using RM range apis
+ *	for AM654 SoC. For future SoCs dev_id will be used as type
+ *	for RM range APIs. In order to maintain ABI backward compatibility
+ *	type is not being changed for AM654 SoC.
+ */
+struct ti_sci_rm_type_map {
+	u32 dev_id;
+	u16 type;
+};
+
+/**
  * struct ti_sci_desc - Description of SoC integration
  * @default_host_id:	Host identifier representing the compute entity
  * @max_rx_timeout_ms:	Timeout for communication with SoC (in Milliseconds)
  * @max_msgs: Maximum number of messages that can be pending
  *		  simultaneously in the system
  * @max_msg_size: Maximum size of data per message that can be handled.
+ * @rm_type_map: RM resource type mapping structure.
  */
 struct ti_sci_desc {
 	u8 default_host_id;
 	int max_rx_timeout_ms;
 	int max_msgs;
 	int max_msg_size;
+	struct ti_sci_rm_type_map *rm_type_map;
 };
 
 /**
@@ -441,7 +451,7 @@ static inline int ti_sci_do_xfer(struct ti_sci_info *info,
 	/* And we wait for the response. */
 	timeout = msecs_to_jiffies(info->desc->max_rx_timeout_ms);
 	if (!wait_for_completion_timeout(&xfer->done, timeout)) {
-		dev_err(dev, "Mbox timedout in resp(caller: %pF)\n",
+		dev_err(dev, "Mbox timedout in resp(caller: %pS)\n",
 			(void *)_RET_IP_);
 		ret = -ETIMEDOUT;
 	}
@@ -473,9 +483,9 @@ static int ti_sci_cmd_get_revision(struct ti_sci_info *info)
 	struct ti_sci_xfer *xfer;
 	int ret;
 
-	/* No need to setup flags since it is expected to respond */
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_VERSION,
-				   0x0, sizeof(struct ti_sci_msg_hdr),
+				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+				   sizeof(struct ti_sci_msg_hdr),
 				   sizeof(*rev_info));
 	if (IS_ERR(xfer)) {
 		ret = PTR_ERR(xfer);
@@ -603,9 +613,9 @@ static int ti_sci_get_device_state(const struct ti_sci_handle *handle,
 	info = handle_to_ti_sci_info(handle);
 	dev = info->dev;
 
-	/* Response is expected, so need of any flags */
 	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_GET_DEVICE_STATE,
-				   0, sizeof(*req), sizeof(*resp));
+				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
+				   sizeof(*req), sizeof(*resp));
 	if (IS_ERR(xfer)) {
 		ret = PTR_ERR(xfer);
 		dev_err(dev, "Message alloc failed(%d)\n", ret);
@@ -642,6 +652,7 @@ fail:
 
 /**
  * ti_sci_cmd_get_device() - command to request for device managed by TISCI
+ *			     that can be shared with other hosts.
  * @handle:	Pointer to TISCI handle as retrieved by *ti_sci_get_handle
  * @id:		Device Identifier
  *
@@ -649,11 +660,29 @@ fail:
  * usage count by balancing get_device with put_device. No refcounting is
  * managed by driver for that purpose.
  *
- * NOTE: The request is for exclusive access for the processor.
- *
  * Return: 0 if all went fine, else return appropriate error.
  */
 static int ti_sci_cmd_get_device(const struct ti_sci_handle *handle, u32 id)
+{
+	return ti_sci_set_device_state(handle, id, 0,
+				       MSG_DEVICE_SW_STATE_ON);
+}
+
+/**
+ * ti_sci_cmd_get_device_exclusive() - command to request for device managed by
+ *				       TISCI that is exclusively owned by the
+ *				       requesting host.
+ * @handle:	Pointer to TISCI handle as retrieved by *ti_sci_get_handle
+ * @id:		Device Identifier
+ *
+ * Request for the device - NOTE: the client MUST maintain integrity of
+ * usage count by balancing get_device with put_device. No refcounting is
+ * managed by driver for that purpose.
+ *
+ * Return: 0 if all went fine, else return appropriate error.
+ */
+static int ti_sci_cmd_get_device_exclusive(const struct ti_sci_handle *handle,
+					   u32 id)
 {
 	return ti_sci_set_device_state(handle, id,
 				       MSG_FLAG_DEVICE_EXCLUSIVE,
@@ -672,6 +701,26 @@ static int ti_sci_cmd_get_device(const struct ti_sci_handle *handle, u32 id)
  * Return: 0 if all went fine, else return appropriate error.
  */
 static int ti_sci_cmd_idle_device(const struct ti_sci_handle *handle, u32 id)
+{
+	return ti_sci_set_device_state(handle, id, 0,
+				       MSG_DEVICE_SW_STATE_RETENTION);
+}
+
+/**
+ * ti_sci_cmd_idle_device_exclusive() - Command to idle a device managed by
+ *					TISCI that is exclusively owned by
+ *					requesting host.
+ * @handle:	Pointer to TISCI handle as retrieved by *ti_sci_get_handle
+ * @id:		Device Identifier
+ *
+ * Request for the device - NOTE: the client MUST maintain integrity of
+ * usage count by balancing get_device with put_device. No refcounting is
+ * managed by driver for that purpose.
+ *
+ * Return: 0 if all went fine, else return appropriate error.
+ */
+static int ti_sci_cmd_idle_device_exclusive(const struct ti_sci_handle *handle,
+					    u32 id)
 {
 	return ti_sci_set_device_state(handle, id,
 				       MSG_FLAG_DEVICE_EXCLUSIVE,
@@ -923,7 +972,7 @@ static int ti_sci_cmd_get_device_resets(const struct ti_sci_handle *handle,
  * Return: 0 if all went well, else returns appropriate error value.
  */
 static int ti_sci_set_clock_state(const struct ti_sci_handle *handle,
-				  u32 dev_id, u8 clk_id,
+				  u32 dev_id, u32 clk_id,
 				  u32 flags, u8 state)
 {
 	struct ti_sci_info *info;
@@ -951,7 +1000,12 @@ static int ti_sci_set_clock_state(const struct ti_sci_handle *handle,
 	}
 	req = (struct ti_sci_msg_req_set_clock_state *)xfer->xfer_buf;
 	req->dev_id = dev_id;
-	req->clk_id = clk_id;
+	if (clk_id < 255) {
+		req->clk_id = clk_id;
+	} else {
+		req->clk_id = 255;
+		req->clk_id_32 = clk_id;
+	}
 	req->request_state = state;
 
 	ret = ti_sci_do_xfer(info, xfer);
@@ -983,7 +1037,7 @@ fail:
  * Return: 0 if all went well, else returns appropriate error value.
  */
 static int ti_sci_cmd_get_clock_state(const struct ti_sci_handle *handle,
-				      u32 dev_id, u8 clk_id,
+				      u32 dev_id, u32 clk_id,
 				      u8 *programmed_state, u8 *current_state)
 {
 	struct ti_sci_info *info;
@@ -1014,7 +1068,12 @@ static int ti_sci_cmd_get_clock_state(const struct ti_sci_handle *handle,
 	}
 	req = (struct ti_sci_msg_req_get_clock_state *)xfer->xfer_buf;
 	req->dev_id = dev_id;
-	req->clk_id = clk_id;
+	if (clk_id < 255) {
+		req->clk_id = clk_id;
+	} else {
+		req->clk_id = 255;
+		req->clk_id_32 = clk_id;
+	}
 
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret) {
@@ -1054,8 +1113,8 @@ fail:
  * Return: 0 if all went well, else returns appropriate error value.
  */
 static int ti_sci_cmd_get_clock(const struct ti_sci_handle *handle, u32 dev_id,
-				u8 clk_id, bool needs_ssc, bool can_change_freq,
-				bool enable_input_term)
+				u32 clk_id, bool needs_ssc,
+				bool can_change_freq, bool enable_input_term)
 {
 	u32 flags = 0;
 
@@ -1080,11 +1139,10 @@ static int ti_sci_cmd_get_clock(const struct ti_sci_handle *handle, u32 dev_id,
  * Return: 0 if all went well, else returns appropriate error value.
  */
 static int ti_sci_cmd_idle_clock(const struct ti_sci_handle *handle,
-				 u32 dev_id, u8 clk_id)
+				 u32 dev_id, u32 clk_id)
 {
-	u32 flags = MSG_FLAG_CLOCK_ALLOW_FREQ_CHANGE;
-
-	return ti_sci_set_clock_state(handle, dev_id, clk_id, flags,
+	return ti_sci_set_clock_state(handle, dev_id, clk_id,
+				      MSG_FLAG_CLOCK_ALLOW_FREQ_CHANGE,
 				      MSG_CLOCK_SW_STATE_UNREQ);
 }
 
@@ -1101,11 +1159,10 @@ static int ti_sci_cmd_idle_clock(const struct ti_sci_handle *handle,
  * Return: 0 if all went well, else returns appropriate error value.
  */
 static int ti_sci_cmd_put_clock(const struct ti_sci_handle *handle,
-				u32 dev_id, u8 clk_id)
+				u32 dev_id, u32 clk_id)
 {
-	u32 flags = MSG_FLAG_CLOCK_ALLOW_FREQ_CHANGE;
-
-	return ti_sci_set_clock_state(handle, dev_id, clk_id, flags,
+	return ti_sci_set_clock_state(handle, dev_id, clk_id,
+				      MSG_FLAG_CLOCK_ALLOW_FREQ_CHANGE,
 				      MSG_CLOCK_SW_STATE_AUTO);
 }
 
@@ -1121,7 +1178,7 @@ static int ti_sci_cmd_put_clock(const struct ti_sci_handle *handle,
  * Return: 0 if all went well, else returns appropriate error value.
  */
 static int ti_sci_cmd_clk_is_auto(const struct ti_sci_handle *handle,
-				  u32 dev_id, u8 clk_id, bool *req_state)
+				  u32 dev_id, u32 clk_id, bool *req_state)
 {
 	u8 state = 0;
 	int ret;
@@ -1150,7 +1207,7 @@ static int ti_sci_cmd_clk_is_auto(const struct ti_sci_handle *handle,
  * Return: 0 if all went well, else returns appropriate error value.
  */
 static int ti_sci_cmd_clk_is_on(const struct ti_sci_handle *handle, u32 dev_id,
-				u8 clk_id, bool *req_state, bool *curr_state)
+				u32 clk_id, bool *req_state, bool *curr_state)
 {
 	u8 c_state = 0, r_state = 0;
 	int ret;
@@ -1183,7 +1240,7 @@ static int ti_sci_cmd_clk_is_on(const struct ti_sci_handle *handle, u32 dev_id,
  * Return: 0 if all went well, else returns appropriate error value.
  */
 static int ti_sci_cmd_clk_is_off(const struct ti_sci_handle *handle, u32 dev_id,
-				 u8 clk_id, bool *req_state, bool *curr_state)
+				 u32 clk_id, bool *req_state, bool *curr_state)
 {
 	u8 c_state = 0, r_state = 0;
 	int ret;
@@ -1215,7 +1272,7 @@ static int ti_sci_cmd_clk_is_off(const struct ti_sci_handle *handle, u32 dev_id,
  * Return: 0 if all went well, else returns appropriate error value.
  */
 static int ti_sci_cmd_clk_set_parent(const struct ti_sci_handle *handle,
-				     u32 dev_id, u8 clk_id, u8 parent_id)
+				     u32 dev_id, u32 clk_id, u32 parent_id)
 {
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_set_clock_parent *req;
@@ -1242,8 +1299,18 @@ static int ti_sci_cmd_clk_set_parent(const struct ti_sci_handle *handle,
 	}
 	req = (struct ti_sci_msg_req_set_clock_parent *)xfer->xfer_buf;
 	req->dev_id = dev_id;
-	req->clk_id = clk_id;
-	req->parent_id = parent_id;
+	if (clk_id < 255) {
+		req->clk_id = clk_id;
+	} else {
+		req->clk_id = 255;
+		req->clk_id_32 = clk_id;
+	}
+	if (parent_id < 255) {
+		req->parent_id = parent_id;
+	} else {
+		req->parent_id = 255;
+		req->parent_id_32 = parent_id;
+	}
 
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret) {
@@ -1273,7 +1340,7 @@ fail:
  * Return: 0 if all went well, else returns appropriate error value.
  */
 static int ti_sci_cmd_clk_get_parent(const struct ti_sci_handle *handle,
-				     u32 dev_id, u8 clk_id, u8 *parent_id)
+				     u32 dev_id, u32 clk_id, u32 *parent_id)
 {
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_get_clock_parent *req;
@@ -1300,7 +1367,12 @@ static int ti_sci_cmd_clk_get_parent(const struct ti_sci_handle *handle,
 	}
 	req = (struct ti_sci_msg_req_get_clock_parent *)xfer->xfer_buf;
 	req->dev_id = dev_id;
-	req->clk_id = clk_id;
+	if (clk_id < 255) {
+		req->clk_id = clk_id;
+	} else {
+		req->clk_id = 255;
+		req->clk_id_32 = clk_id;
+	}
 
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret) {
@@ -1310,10 +1382,14 @@ static int ti_sci_cmd_clk_get_parent(const struct ti_sci_handle *handle,
 
 	resp = (struct ti_sci_msg_resp_get_clock_parent *)xfer->xfer_buf;
 
-	if (!ti_sci_is_response_ack(resp))
+	if (!ti_sci_is_response_ack(resp)) {
 		ret = -ENODEV;
-	else
-		*parent_id = resp->parent_id;
+	} else {
+		if (resp->parent_id < 255)
+			*parent_id = resp->parent_id;
+		else
+			*parent_id = resp->parent_id_32;
+	}
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
@@ -1333,8 +1409,8 @@ fail:
  * Return: 0 if all went well, else returns appropriate error value.
  */
 static int ti_sci_cmd_clk_get_num_parents(const struct ti_sci_handle *handle,
-					  u32 dev_id, u8 clk_id,
-					  u8 *num_parents)
+					  u32 dev_id, u32 clk_id,
+					  u32 *num_parents)
 {
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_get_clock_num_parents *req;
@@ -1361,7 +1437,12 @@ static int ti_sci_cmd_clk_get_num_parents(const struct ti_sci_handle *handle,
 	}
 	req = (struct ti_sci_msg_req_get_clock_num_parents *)xfer->xfer_buf;
 	req->dev_id = dev_id;
-	req->clk_id = clk_id;
+	if (clk_id < 255) {
+		req->clk_id = clk_id;
+	} else {
+		req->clk_id = 255;
+		req->clk_id_32 = clk_id;
+	}
 
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret) {
@@ -1371,10 +1452,14 @@ static int ti_sci_cmd_clk_get_num_parents(const struct ti_sci_handle *handle,
 
 	resp = (struct ti_sci_msg_resp_get_clock_num_parents *)xfer->xfer_buf;
 
-	if (!ti_sci_is_response_ack(resp))
+	if (!ti_sci_is_response_ack(resp)) {
 		ret = -ENODEV;
-	else
-		*num_parents = resp->num_parents;
+	} else {
+		if (resp->num_parents < 255)
+			*num_parents = resp->num_parents;
+		else
+			*num_parents = resp->num_parents_32;
+	}
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
@@ -1402,7 +1487,7 @@ fail:
  * Return: 0 if all went well, else returns appropriate error value.
  */
 static int ti_sci_cmd_clk_get_match_freq(const struct ti_sci_handle *handle,
-					 u32 dev_id, u8 clk_id, u64 min_freq,
+					 u32 dev_id, u32 clk_id, u64 min_freq,
 					 u64 target_freq, u64 max_freq,
 					 u64 *match_freq)
 {
@@ -1431,7 +1516,12 @@ static int ti_sci_cmd_clk_get_match_freq(const struct ti_sci_handle *handle,
 	}
 	req = (struct ti_sci_msg_req_query_clock_freq *)xfer->xfer_buf;
 	req->dev_id = dev_id;
-	req->clk_id = clk_id;
+	if (clk_id < 255) {
+		req->clk_id = clk_id;
+	} else {
+		req->clk_id = 255;
+		req->clk_id_32 = clk_id;
+	}
 	req->min_freq_hz = min_freq;
 	req->target_freq_hz = target_freq;
 	req->max_freq_hz = max_freq;
@@ -1474,7 +1564,7 @@ fail:
  * Return: 0 if all went well, else returns appropriate error value.
  */
 static int ti_sci_cmd_clk_set_freq(const struct ti_sci_handle *handle,
-				   u32 dev_id, u8 clk_id, u64 min_freq,
+				   u32 dev_id, u32 clk_id, u64 min_freq,
 				   u64 target_freq, u64 max_freq)
 {
 	struct ti_sci_info *info;
@@ -1502,7 +1592,12 @@ static int ti_sci_cmd_clk_set_freq(const struct ti_sci_handle *handle,
 	}
 	req = (struct ti_sci_msg_req_set_clock_freq *)xfer->xfer_buf;
 	req->dev_id = dev_id;
-	req->clk_id = clk_id;
+	if (clk_id < 255) {
+		req->clk_id = clk_id;
+	} else {
+		req->clk_id = 255;
+		req->clk_id_32 = clk_id;
+	}
 	req->min_freq_hz = min_freq;
 	req->target_freq_hz = target_freq;
 	req->max_freq_hz = max_freq;
@@ -1535,7 +1630,7 @@ fail:
  * Return: 0 if all went well, else returns appropriate error value.
  */
 static int ti_sci_cmd_clk_get_freq(const struct ti_sci_handle *handle,
-				   u32 dev_id, u8 clk_id, u64 *freq)
+				   u32 dev_id, u32 clk_id, u64 *freq)
 {
 	struct ti_sci_info *info;
 	struct ti_sci_msg_req_get_clock_freq *req;
@@ -1562,7 +1657,12 @@ static int ti_sci_cmd_clk_get_freq(const struct ti_sci_handle *handle,
 	}
 	req = (struct ti_sci_msg_req_get_clock_freq *)xfer->xfer_buf;
 	req->dev_id = dev_id;
-	req->clk_id = clk_id;
+	if (clk_id < 255) {
+		req->clk_id = clk_id;
+	} else {
+		req->clk_id = 255;
+		req->clk_id_32 = clk_id;
+	}
 
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret) {
@@ -1629,13 +1729,41 @@ fail:
 	return ret;
 }
 
+static int ti_sci_get_resource_type(struct ti_sci_info *info, u16 dev_id,
+				    u16 *type)
+{
+	struct ti_sci_rm_type_map *rm_type_map = info->desc->rm_type_map;
+	bool found = false;
+	int i;
+
+	/* If map is not provided then assume dev_id is used as type */
+	if (!rm_type_map) {
+		*type = dev_id;
+		return 0;
+	}
+
+	for (i = 0; rm_type_map[i].dev_id; i++) {
+		if (rm_type_map[i].dev_id == dev_id) {
+			*type = rm_type_map[i].type;
+			found = true;
+			break;
+		}
+	}
+
+	if (!found)
+		return -EINVAL;
+
+	return 0;
+}
+
 /**
  * ti_sci_get_resource_range - Helper to get a range of resources assigned
  *			       to a host. Resource is uniquely identified by
  *			       type and subtype.
  * @handle:		Pointer to TISCI handle.
- * @type:		Resource assignment type that is being requested for
- * @subtype:		Resource assignment subtype that is being requested for
+ * @dev_id:		TISCI device ID.
+ * @subtype:		Resource assignment subtype that is being requested
+ *			from the given device.
  * @s_host:		Host processor ID to which the resources are allocated
  * @range_start:	Start index of the resource range
  * @range_num:		Number of resources in the range
@@ -1643,7 +1771,7 @@ fail:
  * Return: 0 if all went fine, else return appropriate error.
  */
 static int ti_sci_get_resource_range(const struct ti_sci_handle *handle,
-				     u16 type, u8 subtype, u8 s_host,
+				     u32 dev_id, u8 subtype, u8 s_host,
 				     u16 *range_start, u16 *range_num)
 {
 	struct ti_sci_msg_resp_get_resource_range *resp;
@@ -1651,6 +1779,7 @@ static int ti_sci_get_resource_range(const struct ti_sci_handle *handle,
 	struct ti_sci_xfer *xfer;
 	struct ti_sci_info *info;
 	struct device *dev;
+	u16 type;
 	int ret = 0;
 
 	if (IS_ERR(handle))
@@ -1669,6 +1798,13 @@ static int ti_sci_get_resource_range(const struct ti_sci_handle *handle,
 		dev_err(dev, "Message alloc failed(%d)\n", ret);
 		return ret;
 	}
+
+	ret = ti_sci_get_resource_type(info, dev_id, &type);
+	if (ret) {
+		dev_err(dev, "rm type lookup failed for %u\n", dev_id);
+		goto fail;
+	}
+
 	req = (struct ti_sci_msg_req_get_resource_range *)xfer->xfer_buf;
 	req->secondary_host = s_host;
 	req->type = type & MSG_RM_RESOURCE_TYPE_MASK;
@@ -1701,18 +1837,19 @@ fail:
  * ti_sci_cmd_get_resource_range - Get a range of resources assigned to host
  *				   that is same as ti sci interface host.
  * @handle:		Pointer to TISCI handle.
- * @type:		Resource assignment type that is being requested for
- * @subtype:		Resource assignment subtype that is being requested for
+ * @dev_id:		TISCI device ID.
+ * @subtype:		Resource assignment subtype that is being requested
+ *			from the given device.
  * @range_start:	Start index of the resource range
  * @range_num:		Number of resources in the range
  *
  * Return: 0 if all went fine, else return appropriate error.
  */
 static int ti_sci_cmd_get_resource_range(const struct ti_sci_handle *handle,
-					 u16 type, u8 subtype,
+					 u32 dev_id, u8 subtype,
 					 u16 *range_start, u16 *range_num)
 {
-	return ti_sci_get_resource_range(handle, type, subtype,
+	return ti_sci_get_resource_range(handle, dev_id, subtype,
 					 TI_SCI_IRQ_SECONDARY_HOST_INVALID,
 					 range_start, range_num);
 }
@@ -1721,8 +1858,9 @@ static int ti_sci_cmd_get_resource_range(const struct ti_sci_handle *handle,
  * ti_sci_cmd_get_resource_range_from_shost - Get a range of resources
  *					      assigned to a specified host.
  * @handle:		Pointer to TISCI handle.
- * @type:		Resource assignment type that is being requested for
- * @subtype:		Resource assignment subtype that is being requested for
+ * @dev_id:		TISCI device ID.
+ * @subtype:		Resource assignment subtype that is being requested
+ *			from the given device.
  * @s_host:		Host processor ID to which the resources are allocated
  * @range_start:	Start index of the resource range
  * @range_num:		Number of resources in the range
@@ -1731,10 +1869,10 @@ static int ti_sci_cmd_get_resource_range(const struct ti_sci_handle *handle,
  */
 static
 int ti_sci_cmd_get_resource_range_from_shost(const struct ti_sci_handle *handle,
-					     u16 type, u8 subtype, u8 s_host,
+					     u32 dev_id, u8 subtype, u8 s_host,
 					     u16 *range_start, u16 *range_num)
 {
-	return ti_sci_get_resource_range(handle, type, subtype, s_host,
+	return ti_sci_get_resource_range(handle, dev_id, subtype, s_host,
 					 range_start, range_num);
 }
 
@@ -1836,12 +1974,16 @@ static int ti_sci_set_irq(const struct ti_sci_handle *handle, u32 valid_params,
 			  u16 dst_host_irq, u16 ia_id, u16 vint,
 			  u16 global_event, u8 vint_status_bit, u8 s_host)
 {
+	pr_debug("%s: IRQ set with valid_params = 0x%x from src = %d, index = %d, to dst = %d, irq = %d,via ia_id = %d, vint = %d, global event = %d,status_bit = %d\n",
+		 __func__, valid_params, src_id, src_index,
+		 dst_id, dst_host_irq, ia_id, vint, global_event,
+		 vint_status_bit);
+
 	return ti_sci_manage_irq(handle, valid_params, src_id, src_index,
 				 dst_id, dst_host_irq, ia_id, vint,
 				 global_event, vint_status_bit, s_host,
 				 TI_SCI_MSG_SET_IRQ);
 }
-
 
 /**
  * ti_sci_free_irq() - Helper api to free the irq route between the
@@ -1866,6 +2008,11 @@ static int ti_sci_free_irq(const struct ti_sci_handle *handle, u32 valid_params,
 			   u16 dst_host_irq, u16 ia_id, u16 vint,
 			   u16 global_event, u8 vint_status_bit, u8 s_host)
 {
+	pr_debug("%s: IRQ release with valid_params = 0x%x from src = %d, index = %d, to dst = %d, irq = %d,via ia_id = %d, vint = %d, global event = %d,status_bit = %d\n",
+		 __func__, valid_params, src_id, src_index,
+		 dst_id, dst_host_irq, ia_id, vint, global_event,
+		 vint_status_bit);
+
 	return ti_sci_manage_irq(handle, valid_params, src_id, src_index,
 				 dst_id, dst_host_irq, ia_id, vint,
 				 global_event, vint_status_bit, s_host,
@@ -2348,7 +2495,7 @@ static int ti_sci_cmd_rm_psil_pair(const struct ti_sci_handle *handle,
 	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-	ret = ti_sci_is_response_ack(resp) ? 0 : -ENODEV;
+	ret = ti_sci_is_response_ack(resp) ? 0 : -EINVAL;
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
@@ -2394,7 +2541,7 @@ static int ti_sci_cmd_rm_psil_unpair(const struct ti_sci_handle *handle,
 	}
 
 	resp = (struct ti_sci_msg_hdr *)xfer->xfer_buf;
-	ret = ti_sci_is_response_ack(resp) ? 0 : -ENODEV;
+	ret = ti_sci_is_response_ack(resp) ? 0 : -EINVAL;
 
 fail:
 	ti_sci_put_one_xfer(&info->minfo, xfer);
@@ -2402,8 +2549,7 @@ fail:
 	return ret;
 }
 
-static int ti_sci_cmd_rm_udmap_tx_ch_cfg(
-			const struct ti_sci_handle *handle,
+static int ti_sci_cmd_rm_udmap_tx_ch_cfg(const struct ti_sci_handle *handle,
 			const struct ti_sci_msg_rm_udmap_tx_ch_cfg *params)
 {
 	struct ti_sci_msg_rm_udmap_tx_ch_cfg_resp *resp;
@@ -2445,6 +2591,7 @@ static int ti_sci_cmd_rm_udmap_tx_ch_cfg(
 	req->tx_orderid = params->tx_orderid;
 	req->fdepth = params->fdepth;
 	req->tx_sched_priority = params->tx_sched_priority;
+	req->tx_burst_size = params->tx_burst_size;
 
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret) {
@@ -2462,8 +2609,7 @@ fail:
 	return ret;
 }
 
-static int ti_sci_cmd_rm_udmap_rx_ch_cfg(
-			const struct ti_sci_handle *handle,
+static int ti_sci_cmd_rm_udmap_rx_ch_cfg(const struct ti_sci_handle *handle,
 			const struct ti_sci_msg_rm_udmap_rx_ch_cfg *params)
 {
 	struct ti_sci_msg_rm_udmap_rx_ch_cfg_resp *resp;
@@ -2504,6 +2650,7 @@ static int ti_sci_cmd_rm_udmap_rx_ch_cfg(
 	req->rx_chan_type = params->rx_chan_type;
 	req->rx_ignore_short = params->rx_ignore_short;
 	req->rx_ignore_long = params->rx_ignore_long;
+	req->rx_burst_size = params->rx_burst_size;
 
 	ret = ti_sci_do_xfer(info, xfer);
 	if (ret) {
@@ -2521,8 +2668,7 @@ fail:
 	return ret;
 }
 
-static int ti_sci_cmd_rm_udmap_rx_flow_cfg1(
-			const struct ti_sci_handle *handle,
+static int ti_sci_cmd_rm_udmap_rx_flow_cfg(const struct ti_sci_handle *handle,
 			const struct ti_sci_msg_rm_udmap_flow_cfg *params)
 {
 	struct ti_sci_msg_rm_udmap_flow_cfg_resp *resp;
@@ -2867,63 +3013,6 @@ fail:
 }
 
 /**
- * ti_sci_cmd_proc_auth_boot() - Command to authenticate and load the
- *			image and then set the processor configuration flags.
- * @handle:	Pointer to TI SCI handle
- * @proc_id:	Processor ID this request is for
- * @cert_addr:	Memory address at which payload image certificate is located.
- *
- * Return: 0 if all went well, else returns appropriate error value.
- */
-static int ti_sci_cmd_proc_auth_boot(const struct ti_sci_handle *handle,
-				     u8 proc_id, u64 cert_addr)
-{
-	struct ti_sci_msg_req_proc_auth_boot *req;
-	struct ti_sci_msg_hdr *resp;
-	struct ti_sci_info *info;
-	struct ti_sci_xfer *xfer;
-	struct device *dev;
-	int ret = 0;
-
-	if (!handle)
-		return -EINVAL;
-	if (IS_ERR(handle))
-		return PTR_ERR(handle);
-
-	info = handle_to_ti_sci_info(handle);
-	dev = info->dev;
-
-	xfer = ti_sci_get_one_xfer(info, TI_SCI_MSG_PROC_AUTH_BOOT,
-				   TI_SCI_FLAG_REQ_ACK_ON_PROCESSED,
-				   sizeof(*req), sizeof(*resp));
-	if (IS_ERR(xfer)) {
-		ret = PTR_ERR(xfer);
-		dev_err(dev, "Message alloc failed(%d)\n", ret);
-		return ret;
-	}
-	req = (struct ti_sci_msg_req_proc_auth_boot *)xfer->xfer_buf;
-	req->processor_id = proc_id;
-	req->cert_addr_low = cert_addr & TI_SCI_ADDR_LOW_MASK;
-	req->cert_addr_high = (cert_addr & TI_SCI_ADDR_HIGH_MASK) >>
-			       TI_SCI_ADDR_HIGH_SHIFT;
-
-	ret = ti_sci_do_xfer(info, xfer);
-	if (ret) {
-		dev_err(dev, "Mbox send fail %d\n", ret);
-		goto fail;
-	}
-
-	resp = (struct ti_sci_msg_hdr *)xfer->tx_message.buf;
-
-	ret = ti_sci_is_response_ack(resp) ? 0 : -ENODEV;
-
-fail:
-	ti_sci_put_one_xfer(&info->minfo, xfer);
-
-	return ret;
-}
-
-/**
  * ti_sci_cmd_get_boot_status() - Command to get the processor boot status
  * @handle:	Pointer to TI SCI handle
  * @proc_id:	Processor ID this request is for
@@ -3005,7 +3094,9 @@ static void ti_sci_setup_ops(struct ti_sci_info *info)
 	core_ops->reboot_device = ti_sci_cmd_core_reboot;
 
 	dops->get_device = ti_sci_cmd_get_device;
+	dops->get_device_exclusive = ti_sci_cmd_get_device_exclusive;
 	dops->idle_device = ti_sci_cmd_idle_device;
+	dops->idle_device_exclusive = ti_sci_cmd_idle_device_exclusive;
 	dops->put_device = ti_sci_cmd_put_device;
 
 	dops->is_valid = ti_sci_cmd_dev_is_valid;
@@ -3053,7 +3144,6 @@ static void ti_sci_setup_ops(struct ti_sci_info *info)
 	pops->handover = ti_sci_cmd_proc_handover;
 	pops->set_config = ti_sci_cmd_proc_set_config;
 	pops->set_control = ti_sci_cmd_proc_set_control;
-	pops->auth_boot = ti_sci_cmd_proc_auth_boot;
 	pops->get_status = ti_sci_cmd_proc_get_status;
 
 	rops->config = ti_sci_cmd_ring_config;
@@ -3064,7 +3154,7 @@ static void ti_sci_setup_ops(struct ti_sci_info *info)
 
 	udmap_ops->tx_ch_cfg = ti_sci_cmd_rm_udmap_tx_ch_cfg;
 	udmap_ops->rx_ch_cfg = ti_sci_cmd_rm_udmap_rx_ch_cfg;
-	udmap_ops->rx_flow_cfg = ti_sci_cmd_rm_udmap_rx_flow_cfg1;
+	udmap_ops->rx_flow_cfg = ti_sci_cmd_rm_udmap_rx_flow_cfg;
 }
 
 /**
@@ -3114,55 +3204,6 @@ const struct ti_sci_handle *ti_sci_get_handle(struct device *dev)
 	return handle;
 }
 EXPORT_SYMBOL_GPL(ti_sci_get_handle);
-
-/**
- * ti_sci_get_by_phandle() - Get the TI SCI handle using DT phandle
- * @np: device node
- * @propname: property name containing phandle on TISCI node
- *
- * NOTE: The function does not track individual clients of the framework
- * and is expected to be maintained by caller of TI SCI protocol library.
- * ti_sci_put_handle must be balanced with successful ti_sci_get_handle
- * Return: pointer to handle if successful, else:
- * -EPROBE_DEFER if the instance is not ready
- * -ENODEV if the required node handler is missing
- * -EINVAL if invalid conditions are encountered.
- */
-const struct ti_sci_handle *ti_sci_get_by_phandle(struct device_node *np,
-						  const char *property)
-{
-	struct device_node *ti_sci_np;
-	struct list_head *p;
-	struct ti_sci_handle *handle = NULL;
-	struct ti_sci_info *info;
-
-	if (!np) {
-		pr_err("I need a device pointer\n");
-		return ERR_PTR(-EINVAL);
-	}
-
-	ti_sci_np = of_parse_phandle(np, property, 0);
-	if (!ti_sci_np)
-		return ERR_PTR(-ENODEV);
-
-	mutex_lock(&ti_sci_list_mutex);
-	list_for_each(p, &ti_sci_list) {
-		info = list_entry(p, struct ti_sci_info, node);
-		if (ti_sci_np == info->dev->of_node) {
-			handle = &info->handle;
-			info->users++;
-			break;
-		}
-	}
-	mutex_unlock(&ti_sci_list_mutex);
-	of_node_put(ti_sci_np);
-
-	if (!handle)
-		return ERR_PTR(-EPROBE_DEFER);
-
-	return handle;
-}
-EXPORT_SYMBOL_GPL(ti_sci_get_by_phandle);
 
 /**
  * ti_sci_put_handle() - Release the handle acquired by ti_sci_get_handle
@@ -3239,6 +3280,89 @@ const struct ti_sci_handle *devm_ti_sci_get_handle(struct device *dev)
 EXPORT_SYMBOL_GPL(devm_ti_sci_get_handle);
 
 /**
+ * ti_sci_get_by_phandle() - Get the TI SCI handle using DT phandle
+ * @np:		device node
+ * @propname:	property name containing phandle on TISCI node
+ *
+ * NOTE: The function does not track individual clients of the framework
+ * and is expected to be maintained by caller of TI SCI protocol library.
+ * ti_sci_put_handle must be balanced with successful ti_sci_get_by_phandle
+ * Return: pointer to handle if successful, else:
+ * -EPROBE_DEFER if the instance is not ready
+ * -ENODEV if the required node handler is missing
+ * -EINVAL if invalid conditions are encountered.
+ */
+const struct ti_sci_handle *ti_sci_get_by_phandle(struct device_node *np,
+						  const char *property)
+{
+	struct ti_sci_handle *handle = NULL;
+	struct device_node *ti_sci_np;
+	struct ti_sci_info *info;
+	struct list_head *p;
+
+	if (!np) {
+		pr_err("I need a device pointer\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	ti_sci_np = of_parse_phandle(np, property, 0);
+	if (!ti_sci_np)
+		return ERR_PTR(-ENODEV);
+
+	mutex_lock(&ti_sci_list_mutex);
+	list_for_each(p, &ti_sci_list) {
+		info = list_entry(p, struct ti_sci_info, node);
+		if (ti_sci_np == info->dev->of_node) {
+			handle = &info->handle;
+			info->users++;
+			break;
+		}
+	}
+	mutex_unlock(&ti_sci_list_mutex);
+	of_node_put(ti_sci_np);
+
+	if (!handle)
+		return ERR_PTR(-EPROBE_DEFER);
+
+	return handle;
+}
+EXPORT_SYMBOL_GPL(ti_sci_get_by_phandle);
+
+/**
+ * devm_ti_sci_get_by_phandle() - Managed get handle using phandle
+ * @dev:	Device pointer requesting TISCI handle
+ * @propname:	property name containing phandle on TISCI node
+ *
+ * NOTE: This releases the handle once the device resources are
+ * no longer needed. MUST NOT BE released with ti_sci_put_handle.
+ * The function does not track individual clients of the framework
+ * and is expected to be maintained by caller of TI SCI protocol library.
+ *
+ * Return: 0 if all went fine, else corresponding error.
+ */
+const struct ti_sci_handle *devm_ti_sci_get_by_phandle(struct device *dev,
+						       const char *property)
+{
+	const struct ti_sci_handle *handle;
+	const struct ti_sci_handle **ptr;
+
+	ptr = devres_alloc(devm_ti_sci_release, sizeof(*ptr), GFP_KERNEL);
+	if (!ptr)
+		return ERR_PTR(-ENOMEM);
+	handle = ti_sci_get_by_phandle(dev_of_node(dev), property);
+
+	if (!IS_ERR(handle)) {
+		*ptr = handle;
+		devres_add(dev, ptr);
+	} else {
+		devres_free(ptr);
+	}
+
+	return handle;
+}
+EXPORT_SYMBOL_GPL(devm_ti_sci_get_by_phandle);
+
+/*
  * ti_sci_get_free_resource() - Get a free resource from TISCI resource.
  * @res:	Pointer to the TISCI resource
  *
@@ -3287,19 +3411,26 @@ EXPORT_SYMBOL_GPL(ti_sci_release_resource);
 
 /**
  * devm_ti_sci_get_of_resource() - Get a TISCI resource assigned to a device
- * @handle:
+ * @handle:	TISCI handle
  * @dev:	Device pointer to which the resource is assigned
  * @of_prop:	property name by which the resource are represented
+ *
+ * Note: This function expects of_prop to be in the form of tuples
+ *	<type, subtype>. Allocates and initializes ti_sci_resource structure
+ *	for each of_prop. Client driver can directly call
+ *	ti_sci_(get_free, release)_resource apis for handling the resource.
  *
  * Return: Pointer to ti_sci_resource if all went well else appropriate
  *	   error pointer.
  */
 struct ti_sci_resource *
 devm_ti_sci_get_of_resource(const struct ti_sci_handle *handle,
-			    struct device *dev, char *of_prop)
+			    struct device *dev, u32 dev_id, char *of_prop)
 {
-	u32 resource_type, resource_subtype;
+	u32 resource_subtype;
+	u16 resource_type;
 	struct ti_sci_resource *res;
+	bool valid_set = false;
 	int sets, i, ret;
 
 	res = devm_kzalloc(dev, sizeof(*res), GFP_KERNEL);
@@ -3313,49 +3444,56 @@ devm_ti_sci_get_of_resource(const struct ti_sci_handle *handle,
 		return ERR_PTR(sets);
 	}
 
-	res->sets = sets / 2;
+	res->sets = sets;
 
 	res->desc = devm_kcalloc(dev, res->sets, sizeof(*res->desc),
 				 GFP_KERNEL);
 	if (!res->desc)
 		return ERR_PTR(-ENOMEM);
 
-	for (i = 0; i < res->sets; i++) {
-		ret = of_property_read_u32_index(dev_of_node(dev), of_prop,
-						 i * 2, &resource_type);
-		if (ret)
-			return ERR_PTR(-EINVAL);
+	ret = ti_sci_get_resource_type(handle_to_ti_sci_info(handle), dev_id,
+				       &resource_type);
+	if (ret) {
+		dev_err(dev, "No valid resource type for %u\n", dev_id);
+		return ERR_PTR(-EINVAL);
+	}
 
-		ret = of_property_read_u32_index(dev_of_node(dev), of_prop,
-						 (i * 2) + 1,
+	for (i = 0; i < res->sets; i++) {
+		ret = of_property_read_u32_index(dev_of_node(dev), of_prop, i,
 						 &resource_subtype);
 		if (ret)
 			return ERR_PTR(-EINVAL);
 
-		ret = handle->ops.rm_core_ops.get_range(handle, resource_type,
+		ret = handle->ops.rm_core_ops.get_range(handle, dev_id,
 							resource_subtype,
 							&res->desc[i].start,
 							&res->desc[i].num);
 		if (ret) {
-			dev_err(dev, "type %d subtype %d not allocated for host %d\n",
+			dev_dbg(dev, "type %d subtype %d not allocated for host %d\n",
 				resource_type, resource_subtype,
 				handle_to_ti_sci_info(handle)->host_id);
-			return ERR_PTR(ret);
+			res->desc[i].start = 0;
+			res->desc[i].num = 0;
+			continue;
 		}
 
+		valid_set = true;
 		dev_dbg(dev, "res type = %d, subtype = %d, start = %d, num = %d\n",
 			resource_type, resource_subtype, res->desc[i].start,
 			res->desc[i].num);
 
-		res->desc[i].res_map = devm_kzalloc(dev,
-		BITS_TO_LONGS(res->desc[i].num) * sizeof(*res->desc[i].res_map),
-		GFP_KERNEL);
+		res->desc[i].res_map =
+			devm_kzalloc(dev, BITS_TO_LONGS(res->desc[i].num) *
+				     sizeof(*res->desc[i].res_map), GFP_KERNEL);
 		if (!res->desc[i].res_map)
 			return ERR_PTR(-ENOMEM);
 	}
 	raw_spin_lock_init(&res->lock);
 
-	return res;
+	if (valid_set)
+		return res;
+
+	return ERR_PTR(-EINVAL);
 }
 EXPORT_SYMBOL_GPL(devm_ti_sci_get_of_resource);
 
@@ -3379,10 +3517,33 @@ static const struct ti_sci_desc ti_sci_pmmc_k2g_desc = {
 	/* Limited by MBOX_TX_QUEUE_LEN. K2G can handle upto 128 messages! */
 	.max_msgs = 20,
 	.max_msg_size = 64,
+	.rm_type_map = NULL,
+};
+
+static struct ti_sci_rm_type_map ti_sci_am654_rm_type_map[] = {
+	{.dev_id = 56, .type = 0x00b}, /* GIC_IRQ */
+	{.dev_id = 179, .type = 0x000}, /* MAIN_NAV_UDMASS_IA0 */
+	{.dev_id = 187, .type = 0x009}, /* MAIN_NAV_RA */
+	{.dev_id = 188, .type = 0x006}, /* MAIN_NAV_UDMAP */
+	{.dev_id = 194, .type = 0x007}, /* MCU_NAV_UDMAP */
+	{.dev_id = 195, .type = 0x00a}, /* MCU_NAV_RA */
+	{.dev_id = 0, .type = 0x000}, /* end of table */
+};
+
+/* Description for AM654 */
+static const struct ti_sci_desc ti_sci_pmmc_am654_desc = {
+	.default_host_id = 12,
+	/* Conservative duration */
+	.max_rx_timeout_ms = 10000,
+	/* Limited by MBOX_TX_QUEUE_LEN. K2G can handle upto 128 messages! */
+	.max_msgs = 20,
+	.max_msg_size = 60,
+	.rm_type_map = ti_sci_am654_rm_type_map,
 };
 
 static const struct of_device_id ti_sci_of_match[] = {
 	{.compatible = "ti,k2g-sci", .data = &ti_sci_pmmc_k2g_desc},
+	{.compatible = "ti,am654-sci", .data = &ti_sci_pmmc_am654_desc},
 	{ /* Sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, ti_sci_of_match);
@@ -3448,9 +3609,9 @@ static int ti_sci_probe(struct platform_device *pdev)
 	if (!minfo->xfer_block)
 		return -ENOMEM;
 
-	minfo->xfer_alloc_table = devm_kzalloc(dev,
-					       BITS_TO_LONGS(desc->max_msgs)
-					       * sizeof(unsigned long),
+	minfo->xfer_alloc_table = devm_kcalloc(dev,
+					       BITS_TO_LONGS(desc->max_msgs),
+					       sizeof(unsigned long),
 					       GFP_KERNEL);
 	if (!minfo->xfer_alloc_table)
 		return -ENOMEM;

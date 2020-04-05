@@ -1,16 +1,7 @@
-/*
- * PRU IEP Driver
+/* SPDX-License-Identifier: GPL-2.0 */
+/* PRU IEP Driver
  *
  * Copyright (C) 2017 Texas Instruments Incorporated - http://www.ti.com
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 #ifndef _TI_IEP_H_
 #define _TI_IEP_H_
@@ -91,7 +82,6 @@
 #define PRUSS_IEP64_SYNC0_PERIOD_REG   0x194
 #define PRUSS_IEP64_SYNC1_DELAY_REG    0x198
 #define PRUSS_IEP64_SYNC_START_REG     0x19c
-
 
 #define PRUSS_IEP_CMP_INC_MASK       0xfff00
 #define PRUSS_IEP_CMP_INC_SHIFT      8

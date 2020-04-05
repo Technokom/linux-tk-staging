@@ -1,15 +1,5 @@
-/*
- * Copyright (C) 2017 Texas Instruments Incorporated - http://www.ti.com
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- */
+/* SPDX-License-Identifier: GPL-2.0 */
+/* Copyright (C) 2017 Texas Instruments Incorporated - http://www.ti.com */
 #ifndef __NET_TI_PRUSS_NODE_TBL_H
 #define __NET_TI_PRUSS_NODE_TBL_H
 
@@ -23,6 +13,10 @@
 #define MAX_FORGET_TIME		0xffdf
 #define NODE_FREE		0x10
 #define NODE_TAKEN		0x01
+
+#define IND_BINOFS(x) nt->index_array->index_tbl[x].bin_offset
+#define IND_BIN_NO(x) nt->index_array->index_tbl[x].bin_no_entries
+#define BIN_NODEOFS(x) nt->bin_array->bin_tbl[x].node_tbl_offset
 
 #define RED_PROTO_HSR	0
 #define RED_PROTO_PRP	1
@@ -120,8 +114,5 @@ int node_table_insert(struct prueth *prueth, u8 *mac, int port, int sv_frame,
 
 void pop_queue_process(struct prueth *prueth, spinlock_t *lock);
 void pru_spin_lock(struct node_tbl *nt);
-
-extern const struct file_operations prueth_nt_index_fops;
-extern const struct file_operations prueth_nt_bins_fops;
 
 #endif /* __NET_TI_PRUSS_NODE_TBL_H */

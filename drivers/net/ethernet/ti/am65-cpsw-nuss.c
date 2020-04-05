@@ -144,9 +144,7 @@ static void am65_cpsw_nuss_get_ver(struct am65_cpsw_common *common)
 	common->nuss_ver = readl(common->ss_base);
 	common->cpsw_ver = readl(common->cpsw_base);
 	dev_info(common->dev,
-		 "initializing am65 cpsw nuss version 0x%08X,"
-		" cpsw version 0x%08X"
-		" Ports: %u\n",
+		 "initializing am65 cpsw nuss version 0x%08X, cpsw version 0x%08X Ports: %u\n",
 		common->nuss_ver,
 		common->cpsw_ver,
 		common->port_num);
@@ -185,18 +183,22 @@ void am65_cpsw_nuss_adjust_link(struct net_device *ndev)
 		cpsw_ale_control_set(common->ale, port->port_id,
 				     ALE_PORT_STATE, ALE_PORT_STATE_FORWARD);
 
-		netif_carrier_on(ndev);
 		netif_tx_wake_all_queues(ndev);
 	} else {
+		int tmo;
 		/* disable forwarding */
 		cpsw_ale_control_set(common->ale, port->port_id,
 				     ALE_PORT_STATE, ALE_PORT_STATE_DISABLE);
 
-		cpsw_sl_wait_for_idle(port->slave.mac_sl);
+		cpsw_sl_ctl_set(port->slave.mac_sl, CPSW_SL_CTL_CMD_IDLE);
+
+		tmo = cpsw_sl_wait_for_idle(port->slave.mac_sl);
+		dev_dbg(common->dev, "donw msc_sl %08x tmo %d\n",
+			cpsw_sl_reg_read(port->slave.mac_sl, CPSW_SL_MACSTATUS),
+			tmo);
 
 		cpsw_sl_ctl_reset(port->slave.mac_sl);
 
-		netif_carrier_off(ndev);
 		netif_tx_stop_all_queues(ndev);
 	}
 
@@ -525,26 +527,24 @@ static int am65_cpsw_nuss_common_stop(struct am65_cpsw_common *common)
 					msecs_to_jiffies(1000));
 	if (!i)
 		dev_err(common->dev, "tx timeout\n");
+	napi_disable(&common->napi_tx);
 
 	for (i = 0; i < AM65_CPSW_MAX_TX_QUEUES; i++) {
-		k3_nav_udmax_reset_tx_chn(
-				common->tx_chns[i].tx_chn,
-				&common->tx_chns[i],
-				am65_cpsw_nuss_tx_cleanup);
+		k3_nav_udmax_reset_tx_chn(common->tx_chns[i].tx_chn,
+					  &common->tx_chns[i],
+					  am65_cpsw_nuss_tx_cleanup);
 		k3_nav_udmax_disable_tx_chn(common->tx_chns[i].tx_chn);
 	}
 
 	k3_nav_udmax_tdown_rx_chn(common->rx_chns.rx_chn, true);
+	napi_disable(&common->napi_rx);
 
 	for (i = 0; i < AM65_CPSW_MAX_RX_FLOWS; i++)
-		k3_nav_udmax_reset_rx_chn(
-				common->rx_chns.rx_chn, i, &common->rx_chns,
-				am65_cpsw_nuss_rx_cleanup, !!i);
+		k3_nav_udmax_reset_rx_chn(common->rx_chns.rx_chn, i,
+					  &common->rx_chns,
+					  am65_cpsw_nuss_rx_cleanup, !!i);
 
 	k3_nav_udmax_disable_rx_chn(common->rx_chns.rx_chn);
-
-	napi_disable(&common->napi_rx);
-	napi_disable(&common->napi_tx);
 
 	cpsw_ale_stop(common->ale);
 
@@ -561,14 +561,12 @@ static int am65_cpsw_nuss_ndo_slave_stop(struct net_device *ndev)
 	struct am65_cpsw_common *common = am65_ndev_to_common(ndev);
 	int ret;
 
-	cpsw_ale_control_set(common->ale, port->port_id,
-			     ALE_PORT_STATE, ALE_PORT_STATE_DISABLE);
+	if (port->slave.phy)
+		phy_stop(port->slave.phy);
 
 	netif_tx_stop_all_queues(ndev);
-	netif_carrier_off(ndev);
 
 	if (port->slave.phy) {
-		phy_stop(port->slave.phy);
 		phy_disconnect(port->slave.phy);
 		port->slave.phy = NULL;
 	}
@@ -576,8 +574,6 @@ static int am65_cpsw_nuss_ndo_slave_stop(struct net_device *ndev)
 	ret = am65_cpsw_nuss_common_stop(common);
 	if (ret)
 		return ret;
-
-	cpsw_sl_reset(port->slave.mac_sl, 100);
 
 	common->usage_count--;
 	pm_runtime_put(common->dev);
@@ -639,9 +635,6 @@ static int am65_cpsw_nuss_ndo_slave_open(struct net_device *ndev)
 	/* mac_sl should be configured via phy-link interface */
 	cpsw_sl_reset(port->slave.mac_sl, 100);
 	cpsw_sl_ctl_reset(port->slave.mac_sl);
-
-	cpsw_ale_control_set(common->ale, port->port_id,
-			     ALE_PORT_STATE, ALE_PORT_STATE_FORWARD);
 
 	cpsw_phy_sel(common->dev, port->slave.phy_if, port->port_id);
 
@@ -725,9 +718,9 @@ static void am65_cpsw_nuss_rx_csum(struct sk_buff *skb, u32 csum_info)
 	if (unlikely(!(skb->dev->features & NETIF_F_RXCSUM)))
 		return;
 
-	if (!(csum_info & AM65_CPSW_RX_PSD_CSUM_ERR) &&
-	    (csum_info & (AM65_CPSW_RX_PSD_IPV6_VALID |
-			  AM65_CPSW_RX_PSD_IPV6_VALID))) {
+	if ((csum_info & (AM65_CPSW_RX_PSD_IPV6_VALID |
+			  AM65_CPSW_RX_PSD_IPV4_VALID)) &&
+			  !(csum_info & AM65_CPSW_RX_PSD_CSUM_ERR)) {
 		if (csum_info & AM65_CPSW_RX_PSD_IS_FRAGMENT) {
 			skb->ip_summed = CHECKSUM_COMPLETE;
 			skb->csum = csum_unfold(csum_info &
@@ -794,7 +787,7 @@ static int am65_cpsw_nuss_rx_packets(struct am65_cpsw_common *common,
 
 	if (unlikely(!netif_running(skb->dev))) {
 		dev_kfree_skb_any(skb);
-		return -ENODEV;
+		return 0;
 	}
 
 	new_skb = netdev_alloc_skb_ip_align(ndev, AM65_CPSW_MAX_PACKET_SIZE);
@@ -802,7 +795,7 @@ static int am65_cpsw_nuss_rx_packets(struct am65_cpsw_common *common,
 		skb_put(skb, pkt_len);
 		skb->protocol = eth_type_trans(skb, ndev);
 		am65_cpsw_nuss_rx_csum(skb, csum_info);
-		netif_receive_skb(skb);
+		napi_gro_receive(&common->napi_rx, skb);
 
 		ndev_priv = netdev_priv(ndev);
 		stats = this_cpu_ptr(ndev_priv->stats);
@@ -820,7 +813,7 @@ static int am65_cpsw_nuss_rx_packets(struct am65_cpsw_common *common,
 	if (netif_dormant(ndev)) {
 		dev_kfree_skb_any(new_skb);
 		ndev->stats.rx_dropped++;
-		return -ENODEV;
+		return 0;
 	}
 
 	ret = am65_cpsw_nuss_rx_push(common, new_skb);
@@ -857,10 +850,8 @@ static int am65_cpsw_nuss_rx_poll(struct napi_struct *napi_rx, int budget)
 
 	dev_dbg(common->dev, "%s num_rx:%d %d\n", __func__, num_rx, budget);
 
-	if (num_rx < budget) {
-		napi_complete(napi_rx);
+	if (num_rx < budget && napi_complete_done(napi_rx, num_rx))
 		enable_irq(common->rx_chns.irq);
-	}
 
 	return num_rx;
 }
@@ -997,6 +988,7 @@ static int am65_cpsw_nuss_tx_poll(struct napi_struct *napi_tx, int budget)
 	/* process every unprocessed channel */
 	for (ch = common->tx_ch_num; ch; ch--) {
 		u32 cur_ch = ch;
+
 		cur_budget = budget - num_tx;
 
 		if (common->pf_p0_rx_ptype_rrobin) {
@@ -1004,8 +996,8 @@ static int am65_cpsw_nuss_tx_poll(struct napi_struct *napi_tx, int budget)
 					   common->tx_ch_num;
 			cur_ch = common->cur_txq + 1;
 		}
-		num_tx += am65_cpsw_nuss_tx_compl_packets(
-				common, cur_ch, cur_budget);
+		num_tx += am65_cpsw_nuss_tx_compl_packets(common, cur_ch,
+							  cur_budget);
 		if (num_tx >= budget)
 			break;
 	}
@@ -1200,8 +1192,8 @@ drop_stop_q_busy:
 	return NETDEV_TX_BUSY;
 }
 
-static int am65_cpsw_nuss_ndo_slave_set_mac_address(
-		struct net_device *ndev, void *addr)
+static int am65_cpsw_nuss_ndo_slave_set_mac_address(struct net_device *ndev,
+						    void *addr)
 {
 	struct am65_cpsw_port *port = am65_ndev_to_port(ndev);
 	struct am65_cpsw_common *common = am65_ndev_to_common(ndev);
@@ -1504,9 +1496,9 @@ static int am65_cpsw_nuss_init_tx_chns(struct am65_cpsw_common *common)
 	struct device *dev = common->dev;
 	u32  max_desc_num = ALIGN(AM65_CPSW_MAX_TX_DESC, MAX_SKB_FRAGS);
 	struct k3_nav_udmax_tx_channel_cfg tx_cfg = {0};
-	struct k3_nav_ring_cfg ring_cfg = {
-		.elm_size = K3_NAV_RINGACC_RING_ELSIZE_8,
-		.mode = K3_NAV_RINGACC_RING_MODE_RING,
+	struct k3_ring_cfg ring_cfg = {
+		.elm_size = K3_RINGACC_RING_ELSIZE_8,
+		.mode = K3_RINGACC_RING_MODE_RING,
 		.flags = 0
 	};
 	u32 hdesc_size;
@@ -1532,9 +1524,10 @@ static int am65_cpsw_nuss_init_tx_chns(struct am65_cpsw_common *common)
 		tx_chn->dev = dev;
 		tx_chn->id = i;
 		tx_chn->descs_num = max_desc_num;
-		tx_chn->desc_pool = k3_knav_pool_create_name(
-					dev, tx_chn->descs_num,
-					hdesc_size, tx_chn_name);
+		tx_chn->desc_pool = k3_knav_pool_create_name(dev,
+							     tx_chn->descs_num,
+							     hdesc_size,
+							     tx_chn_name);
 		if (IS_ERR(tx_chn->desc_pool)) {
 			ret = PTR_ERR(tx_chn->desc_pool);
 			dev_err(dev, "Failed to create poll %d\n", ret);
@@ -1629,22 +1622,22 @@ static int am65_cpsw_nuss_init_rx_chns(struct am65_cpsw_common *common)
 			k3_nav_udmax_rx_get_flow_id_base(rx_chn->rx_chn);
 	dev_info(dev, "set new flow-id-base %u\n", common->rx_flow_id_base);
 
-	fdqring_id = K3_NAV_RINGACC_RING_ID_ANY;
+	fdqring_id = K3_RINGACC_RING_ID_ANY;
 	for (i = 0; i < rx_cfg.flow_id_num; i++) {
-		struct k3_nav_ring_cfg rxring_cfg = {
-			.elm_size = K3_NAV_RINGACC_RING_ELSIZE_8,
-			.mode = K3_NAV_RINGACC_RING_MODE_RING,
+		struct k3_ring_cfg rxring_cfg = {
+			.elm_size = K3_RINGACC_RING_ELSIZE_8,
+			.mode = K3_RINGACC_RING_MODE_RING,
 			.flags = 0,
 		};
-		struct k3_nav_ring_cfg fdqring_cfg = {
-			.elm_size = K3_NAV_RINGACC_RING_ELSIZE_8,
-			.mode = K3_NAV_RINGACC_RING_MODE_MESSAGE,
-			.flags = K3_NAV_RINGACC_RING_SHARED,
+		struct k3_ring_cfg fdqring_cfg = {
+			.elm_size = K3_RINGACC_RING_ELSIZE_8,
+			.mode = K3_RINGACC_RING_MODE_MESSAGE,
+			.flags = K3_RINGACC_RING_SHARED,
 		};
 		struct k3_nav_udmax_rx_flow_cfg rx_flow_cfg = {
 			.rx_cfg = rxring_cfg,
 			.rxfdq_cfg = fdqring_cfg,
-			.ring_rxq_id = K3_NAV_RINGACC_RING_ID_ANY,
+			.ring_rxq_id = K3_RINGACC_RING_ID_ANY,
 			.src_tag_lo_sel =
 				K3_NAV_UDMAX_SRC_TAG_LO_USE_REMOTE_SRC_TAG,
 		};
@@ -1878,7 +1871,8 @@ static int am65_cpsw_nuss_init_slave_ports(struct am65_cpsw_common *common)
 		if (mac_addr && is_valid_ether_addr(mac_addr)) {
 			ether_addr_copy(port->slave.mac_addr, mac_addr);
 		} else if (am65_cpsw_am654_get_efuse_macid(
-				port_np, port->port_id, port->slave.mac_addr)) {
+				port_np, port->port_id, port->slave.mac_addr) ||
+			   !is_valid_ether_addr(port->slave.mac_addr)) {
 			random_ether_addr(port->slave.mac_addr);
 			dev_err(dev, "Use rundom MAC address\n");
 		}
@@ -1909,10 +1903,10 @@ static int am65_cpsw_nuss_init_ndev_2g(struct am65_cpsw_common *common)
 	port = &common->ports[1];
 
 	/* alloc netdev */
-	port->ndev = devm_alloc_etherdev_mqs(
-			common->dev,
-			sizeof(struct am65_cpsw_ndev_priv),
-			common->tx_ch_num, common->rx_ch_num);
+	port->ndev = devm_alloc_etherdev_mqs(common->dev,
+					     sizeof(struct am65_cpsw_ndev_priv),
+					     common->tx_ch_num,
+					     common->rx_ch_num);
 	if (!port->ndev) {
 		dev_err(dev, "error allocating slave net_device %u\n",
 			port->port_id);
@@ -1934,11 +1928,13 @@ static int am65_cpsw_nuss_init_ndev_2g(struct am65_cpsw_common *common)
 				  NETIF_F_HW_CSUM;
 	port->ndev->features = port->ndev->hw_features |
 			       NETIF_F_HW_VLAN_CTAG_FILTER;
-	/* Disable TX checksum offload by default due to HW bug */
-	port->ndev->features &= ~NETIF_F_HW_CSUM;
 	port->ndev->vlan_features |=  NETIF_F_SG;
 	port->ndev->netdev_ops = &am65_cpsw_nuss_netdev_ops_2g;
 	port->ndev->ethtool_ops = &am65_cpsw_ethtool_ops_slave;
+
+	/* Disable TX checksum offload by default due to HW bug */
+	if (common->pdata->quirks & AM65_CPSW_QUIRK_I2027_NO_TX_CSUM)
+		port->ndev->features &= ~NETIF_F_HW_CSUM;
 
 	ndev_priv->stats = netdev_alloc_pcpu_stats(struct am65_cpsw_ndev_stats);
 	if (!ndev_priv->stats)
@@ -1953,8 +1949,8 @@ static int am65_cpsw_nuss_init_ndev_2g(struct am65_cpsw_common *common)
 
 	netif_tx_napi_add(port->ndev, &common->napi_tx,
 			  am65_cpsw_nuss_tx_poll, NAPI_POLL_WEIGHT);
-	netif_tx_napi_add(port->ndev, &common->napi_rx,
-			  am65_cpsw_nuss_rx_poll, NAPI_POLL_WEIGHT);
+	netif_napi_add(port->ndev, &common->napi_rx,
+		       am65_cpsw_nuss_rx_poll, NAPI_POLL_WEIGHT);
 
 	common->pf_p0_rx_ptype_rrobin = true;
 	ret = register_netdev(port->ndev);
@@ -1980,8 +1976,24 @@ static void am65_cpsw_nuss_cleanup_ndev(struct am65_cpsw_common *common)
 	}
 }
 
+static const struct am65_cpsw_pdata am65x_sr1_0 = {
+	.quirks = AM65_CPSW_QUIRK_I2027_NO_TX_CSUM,
+};
+
+static const struct am65_cpsw_pdata j721e_sr1_0 = {
+	.quirks = 0,
+};
+
+static const struct of_device_id am65_cpsw_nuss_of_mtable[] = {
+	{ .compatible = "ti,am654-cpsw-nuss", .data = &am65x_sr1_0 },
+	{ .compatible = "ti,j721e-cpsw-nuss", .data = &j721e_sr1_0 },
+	{ /* sentinel */ },
+};
+MODULE_DEVICE_TABLE(of, am65_cpsw_nuss_of_mtable);
+
 static int am65_cpsw_nuss_probe(struct platform_device *pdev)
 {
+	const struct of_device_id *of_id;
 	struct cpsw_ale_params ale_params;
 	struct device *dev = &pdev->dev;
 	struct am65_cpsw_common *common;
@@ -1994,6 +2006,11 @@ static int am65_cpsw_nuss_probe(struct platform_device *pdev)
 	if (!common)
 		return -ENOMEM;
 	common->dev = dev;
+
+	of_id = of_match_device(am65_cpsw_nuss_of_mtable, dev);
+	if (!of_id)
+		return -EINVAL;
+	common->pdata = of_id->data;
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "cpsw_nuss");
 	common->ss_base = devm_ioremap_resource(&pdev->dev, res);
@@ -2121,6 +2138,12 @@ static int am65_cpsw_nuss_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	ret = dma_coerce_mask_and_coherent(dev, DMA_BIT_MASK(48));
+	if (ret) {
+		dev_err(dev, "error setting dma mask: %d\n", ret);
+		goto unreg_ndev;
+	}
+
 	ret = devm_request_irq(dev, common->tx_chns[0].irq,
 			       am65_cpsw_nuss_tx_irq,
 			       0, dev_name(dev), common);
@@ -2165,12 +2188,6 @@ static int am65_cpsw_nuss_remove(struct platform_device *pdev)
 
 	return 0;
 }
-
-static const struct of_device_id am65_cpsw_nuss_of_mtable[] = {
-	{ .compatible = "ti,am654-cpsw-nuss", .data = NULL },
-	{ /* sentinel */ },
-};
-MODULE_DEVICE_TABLE(of, am65_cpsw_nuss_of_mtable);
 
 static struct platform_driver am65_cpsw_nuss_driver = {
 	.driver = {

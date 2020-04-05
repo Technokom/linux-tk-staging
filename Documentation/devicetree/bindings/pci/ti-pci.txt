@@ -3,8 +3,8 @@ TI PCI Controllers
 PCIe DesignWare Controller
  - compatible: Should be "ti,dra7-pcie" for RC (deprecated)
 	       Should be "ti,dra7-pcie-ep" for EP (deprecated)
-	       Should be "ti,dra746-pcie-rc" for dra74x/dra76x in RC mode
-	       Should be "ti,dra746-pcie-ep" for dra74x/dra76x in EP mode
+	       Should be "ti,dra746-pcie-rc" for dra74x/dra76 in RC mode
+	       Should be "ti,dra746-pcie-ep" for dra74x/dra76 in EP mode
 	       Should be "ti,dra726-pcie-rc" for dra72x in RC mode
 	       Should be "ti,dra726-pcie-ep" for dra72x in EP mode
  - phys : list of PHY specifiers (used by generic PHY framework)
@@ -13,8 +13,9 @@ PCIe DesignWare Controller
  - ti,hwmods : Name of the hwmod associated to the pcie, "pcie<X>",
 	       where <X> is the instance number of the pcie from the HW spec.
  - num-lanes as specified in ../designware-pcie.txt
- - ti,syscon-conf : phandle to syscon-conf dt node (required to support x2 mode)
- - ti,syscon-pcie : phandle to syscon-pcie dt node (required to support x2 mode)
+ - ti,syscon-lane-sel : phandle/offset pair. Phandle to the system control
+			module and the register offset to specify lane
+			selection.
 
 HOST MODE
 =========
@@ -32,11 +33,6 @@ HOST MODE
    ranges,
    interrupt-map-mask,
    interrupt-map : as specified in ../designware-pcie.txt
- - ti,syscon-unaligned-access: phandle to the syscon DT node. The 1st argument
-			       should contain the register offset within syscon
-			       and the 2nd argument should contain the bit field
-			       for setting the bit to enable unaligned
-			       access.
 
 DEVICE MODE
 ===========

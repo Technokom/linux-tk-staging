@@ -21,7 +21,8 @@ tpd12s015: encoder@1 {
 
 	gpios = <&gpio2 28 GPIO_ACTIVE_HIGH>,	/* 60, CT CP HPD */
 		<&gpio2 9 GPIO_ACTIVE_HIGH>,	/* 41, LS OE */
-		<&gpio2 31 GPIO_ACTIVE_HIGH>;	/* 63, HPD */
+		<&gpio2 31 GPIO_ACTIVE_HIGH>	/* 63, HPD */
+		<&mcasp8 2 GPIO_ACTIVE_HIGH>;	/* mcasp8.axr2, i2c2/ddc switch */
 
 	disable-hpd;
 

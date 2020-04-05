@@ -22,4 +22,8 @@ struct tidss_plane *tidss_plane_create(struct tidss_device *tidss,
 				       u32 hw_plane_id,	u32 plane_type,
 				       u32 crtc_mask, const u32 *formats,
 				       u32 num_formats);
+
+dma_addr_t dispc7_plane_state_paddr(const struct drm_plane_state *state);
+dma_addr_t dispc7_plane_state_p_uv_addr(const struct drm_plane_state *state);
+
 #endif

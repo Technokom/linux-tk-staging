@@ -345,7 +345,7 @@ static void am33xx_prm_global_warm_sw_reset(void)
 static void am33xx_pwrdm_save_context(struct powerdomain *pwrdm)
 {
 	pwrdm->context = am33xx_prm_read_reg(pwrdm->prcm_offs,
-					     pwrdm->pwrstctrl_offs);
+						pwrdm->pwrstctrl_offs);
 	/*
 	 * Do not save LOWPOWERSTATECHANGE, writing a 1 indicates a request,
 	 * reading back a 1 indicates a request in progress.

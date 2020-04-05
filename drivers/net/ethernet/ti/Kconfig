@@ -18,7 +18,7 @@ if NET_VENDOR_TI
 
 config TI_DAVINCI_EMAC
 	tristate "TI DaVinci EMAC Support"
-	depends on ARM && ( ARCH_DAVINCI || ARCH_OMAP3 )
+	depends on ARM && ( ARCH_DAVINCI || ARCH_OMAP3 ) || COMPILE_TEST
 	select TI_DAVINCI_MDIO
 	select TI_DAVINCI_CPDMA
 	select PHYLIB
@@ -30,7 +30,7 @@ config TI_DAVINCI_EMAC
 
 config TI_DAVINCI_MDIO
 	tristate "TI DaVinci MDIO Support"
-	depends on ARCH_DAVINCI || ARCH_OMAP2PLUS || ARCH_KEYSTONE || ARCH_K3
+	depends on ARCH_DAVINCI || ARCH_OMAP2PLUS || ARCH_KEYSTONE || ARCH_K3 || COMPILE_TEST
 	select PHYLIB
 	---help---
 	  This driver supports TI's DaVinci MDIO module.
@@ -40,7 +40,8 @@ config TI_DAVINCI_MDIO
 
 config TI_DAVINCI_CPDMA
 	tristate "TI DaVinci CPDMA Support"
-	depends on ARCH_DAVINCI || ARCH_OMAP2PLUS
+	depends on ARCH_DAVINCI || ARCH_OMAP2PLUS || COMPILE_TEST
+	select GENERIC_ALLOCATOR
 	---help---
 	  This driver supports TI's DaVinci CPDMA dma engine.
 
@@ -60,7 +61,7 @@ config TI_CPSW_ALE
 
 config TI_CPSW
 	tristate "TI CPSW Switch Support"
-	depends on ARCH_DAVINCI || ARCH_OMAP2PLUS
+	depends on ARCH_DAVINCI || ARCH_OMAP2PLUS || COMPILE_TEST
 	select TI_DAVINCI_CPDMA
 	select TI_DAVINCI_MDIO
 	select TI_CPSW_PHY_SEL
@@ -75,7 +76,7 @@ config TI_CPSW
 
 config TI_CPTS
 	bool "TI Common Platform Time Sync (CPTS) Support"
-	depends on TI_CPSW || TI_KEYSTONE_NETCP
+	depends on TI_CPSW || TI_KEYSTONE_NETCP || COMPILE_TEST
 	depends on POSIX_TIMERS
 	---help---
 	  This driver supports the Common Platform Time Sync unit of
@@ -96,7 +97,7 @@ config TI_AM65_CPSW_NUSS
 	select TI_CPSW_ALE
 	select TI_DAVINCI_MDIO
 	select TI_CPSW_PHY_SEL
-	depends on ARCH_K3 && OF && TI_K3_NAVSS_UDMA_GLUE_LAYER
+	depends on ARCH_K3 && OF && TI_K3_UDMA_GLUE_LAYER
 	default n
 	---help---
 	  This driver supports K3 AM654 Ethernet Switch SubSystem Driver
@@ -157,11 +158,21 @@ config CPMAC
 	  TI AR7 CPMAC Ethernet support
 
 config TI_PRUETH
-	tristate "TI PRU Ethernet EMAC/Switch driver"
-	depends on PRUSS_REMOTEPROC
-	depends on SOC_AM33XX || SOC_AM43XX || SOC_DRA7XX || ARCH_KEYSTONE
+	tristate "TI PRU Ethernet EMAC driver"
+	depends on PRU_REMOTEPROC
 	---help---
-	  Support EMAC over PRUSS.
+	  Support single or dual EMAC over PRUSS.
+
+config TI_ICSSG_PRUETH
+	tristate "TI Gigabit PRU Ethernet driver"
+	select TI_DAVINCI_MDIO
+	select NET_PTP_CLASSIFY
+	imply PTP_1588_CLOCK
+	depends on PRU_REMOTEPROC
+	depends on ARCH_K3 && OF && TI_K3_UDMA_GLUE_LAYER
+	---help---
+	  Support dual Gigabit Ethernet ports over the ICSSG PRU Subsystem
+	  This subsystem is available starting with the AM65 platform.
 
 config TI_PTP_BC
        tristate "TI Boundary Clock Support"
@@ -178,15 +189,9 @@ config TI_1PPS_DM_TIMER
 	bool "TI 1PPS dm timer implementation"
 	depends on OMAP_DM_TIMER
 	---help---
-	  Enables 1pps pulse generation using dm timer
-
-config TI_ICSSG_PRUETH
-	tristate "TI Gigabit PRU Ethernet driver"
-	select TI_DAVINCI_MDIO
-	depends on PRUSS_REMOTEPROC
-	depends on OF && TI_K3_NAVSS_UDMA_GLUE_LAYER && TI_K3_NAVSS_DESC_POOL
-	---help---
-	  Support dual Gigabit Ethernet ports over the ICSSG PRU Subsystem
-	  This subsystem is available starting with the AM65 platform.
+	  This driver supports PTP 1PPS signal generation using dm timer. This
+	  feature is availabel at the AM571(4)x-idk platform with hardware
+	  rework and the similar hardware modifications will be required for
+	  other TI EVMs and custom platforms.
 
 endif # NET_VENDOR_TI

@@ -1,20 +1,15 @@
-/*
- * PRU Ethernet Driver
+// SPDX-License-Identifier: GPL-2.0
+/* PRU Ethernet Driver debugfs files
  *
  * Copyright (C) 2018 Texas Instruments Incorporated - http://www.ti.com
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/debugfs.h>
+#include <linux/pruss.h>
 #include <linux/etherdevice.h>
+#include "icss_switch.h"
+#include "prueth.h"
 #include "prueth_node_tbl.h"
 #include "hsr_prp_firmware.h"
 
@@ -240,13 +235,10 @@ prueth_vlan_filter_show(struct seq_file *sfp, void *data)
 	u32 vlan_ctrl_byte = prueth->fw_offsets->vlan_ctrl_byte;
 	u32 vlan_filter_tbl = prueth->fw_offsets->vlan_filter_tbl;
 
-	if (PRUETH_IS_EMAC(prueth)) {
-		ram = (emac->port_id == PRUETH_PORT_MII0) ?
-				prueth->mem[PRUETH_MEM_DRAM0].va :
-				prueth->mem[PRUETH_MEM_DRAM1].va;
-	} else {
+	if (PRUETH_IS_EMAC(prueth))
+		ram = prueth->mem[emac->dram].va;
+	else
 		ram = prueth->mem[PRUETH_MEM_SHARED_RAM].va;
-	}
 
 	val = readb(ram + vlan_ctrl_byte);
 	seq_printf(sfp, "VLAN Filter : %s",
@@ -293,9 +285,9 @@ prueth_vlan_filter_open(struct inode *inode, struct file *filp)
 }
 
 static const struct file_operations prueth_vlan_filter_fops = {
-	.owner	= THIS_MODULE,
-	.open	= prueth_vlan_filter_open,
-	.read	= seq_read,
+	.owner  = THIS_MODULE,
+	.open   = prueth_vlan_filter_open,
+	.read   = seq_read,
 	.llseek = seq_lseek,
 	.release = single_release,
 };
@@ -307,14 +299,17 @@ prueth_mc_filter_show(struct seq_file *sfp, void *data)
 {
 	struct prueth_emac *emac = (struct prueth_emac *)sfp->private;
 	struct prueth *prueth = emac->prueth;
-	void __iomem *ram = (emac->port_id == PRUETH_PORT_MII0) ?
-				prueth->mem[PRUETH_MEM_DRAM0].va :
-				prueth->mem[PRUETH_MEM_DRAM1].va;
+	void __iomem *ram;
 	u8 val;
 	int i;
 	u32 mc_ctrl_byte = prueth->fw_offsets->mc_ctrl_byte;
 	u32 mc_filter_mask = prueth->fw_offsets->mc_filter_mask;
 	u32 mc_filter_tbl = prueth->fw_offsets->mc_filter_tbl;
+
+	if (PRUETH_IS_EMAC(prueth))
+		ram = prueth->mem[emac->dram].va;
+	else
+		ram = prueth->mem[PRUETH_MEM_DRAM1].va;
 
 	val = readb(ram + mc_ctrl_byte);
 
@@ -460,6 +455,96 @@ static const struct file_operations prueth_error_stats_fops = {
 	.release = single_release,
 };
 
+/* indexes */
+static int
+prueth_nt_index_show(struct seq_file *sfp, void *data)
+{
+	struct node_tbl *nt = (struct node_tbl *)sfp->private;
+	int j;
+	int cnt_i = 0;
+	int cnt_b = 0;
+
+	for (j = 0; j < nt->index_array_max_entries; j++)
+		if ((IND_BINOFS(j) < nt->bin_array_max_entries) &&
+		    (IND_BIN_NO(j) > 0)) {
+			seq_printf(sfp, "%3d; ofs %3d; no %3d\n", j,
+				   IND_BINOFS(j), IND_BIN_NO(j));
+			cnt_i++;
+			cnt_b += IND_BIN_NO(j);
+		}
+
+	seq_printf(sfp, "\nTotal indexes %d; bins %d;  lre_cnt %d\n",
+		   cnt_i, cnt_b, nt->nt_lre_cnt->lre_cnt);
+
+	return 0;
+}
+
+static int
+prueth_nt_index_open(struct inode *inode, struct file *filp)
+{
+	return single_open(filp, prueth_nt_index_show,
+			   inode->i_private);
+}
+
+const struct file_operations prueth_nt_index_fops = {
+	.owner	= THIS_MODULE,
+	.open	= prueth_nt_index_open,
+	.read	= seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+/* bins */
+static int
+prueth_nt_bins_show(struct seq_file *sfp, void *data)
+{
+	struct node_tbl *nt = (struct node_tbl *)sfp->private;
+	int j, o;
+	int cnt = 0;
+
+	for (j = 0; j < nt->bin_array_max_entries; j++)
+		if (nt->bin_array->bin_tbl[j].node_tbl_offset <
+		    nt->nt_array_max_entries) {
+			o = nt->bin_array->bin_tbl[j].node_tbl_offset;
+			seq_printf(sfp, "%3d; ofs %3d; %02x-%02x-%02x-%02x-%02x-%02x %02x %02x ra %4d; rb %4d; s%5d; a%5d; b%5d\n",
+				   j, nt->bin_array->bin_tbl[j].node_tbl_offset,
+				   nt->bin_array->bin_tbl[j].src_mac_id[3],
+				   nt->bin_array->bin_tbl[j].src_mac_id[2],
+				   nt->bin_array->bin_tbl[j].src_mac_id[1],
+				   nt->bin_array->bin_tbl[j].src_mac_id[0],
+				   nt->bin_array->bin_tbl[j].src_mac_id[5],
+				   nt->bin_array->bin_tbl[j].src_mac_id[4],
+				   nt->nt_array->node_tbl[o].entry_state,
+				   nt->nt_array->node_tbl[o].status,
+				   nt->nt_array->node_tbl[o].cnt_ra,
+				   nt->nt_array->node_tbl[o].cnt_rb,
+				   nt->nt_array->node_tbl[o].time_last_seen_s,
+				   nt->nt_array->node_tbl[o].time_last_seen_a,
+				   nt->nt_array->node_tbl[o].time_last_seen_b
+				   );
+			cnt++;
+		}
+	seq_printf(sfp, "\nTotal valid entries %d; lre_cnt %d\n",
+		   cnt, nt->nt_lre_cnt->lre_cnt);
+
+	return 0;
+}
+
+static int
+prueth_nt_bins_open(struct inode *inode, struct file *filp)
+{
+	return single_open(filp, prueth_nt_bins_show,
+			   inode->i_private);
+}
+
+const struct file_operations prueth_nt_bins_fops = {
+	.owner	= THIS_MODULE,
+	.open	= prueth_nt_bins_open,
+	.read	= seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 /* prueth_hsr_prp_debugfs_term - Tear down debugfs intrastructure
  *
  * Description:
@@ -499,9 +584,9 @@ int prueth_hsr_prp_debugfs_init(struct prueth *prueth)
 	char dir[32];
 
 	memset(dir, 0, sizeof(dir));
-	if (PRUETH_HAS_HSR(prueth))
+	if (PRUETH_HAS_HSR(prueth)) {
 		sprintf(dir, "prueth-hsr-%d", id);
-	else if (PRUETH_HAS_PRP(prueth)) {
+	} else if (PRUETH_HAS_PRP(prueth)) {
 		sprintf(dir, "prueth-prp-%d", id);
 	} else {
 		dev_err(dev, "unknown eth_type: %u\n", prueth->eth_type);
@@ -585,7 +670,6 @@ int prueth_hsr_prp_debugfs_init(struct prueth *prueth)
 error:
 	prueth_hsr_prp_debugfs_term(prueth);
 	return rc;
-
 }
 
 /* prueth_dualemac_debugfs_term - Tear down debugfs intrastructure for dual emac
@@ -608,7 +692,6 @@ prueth_dualemac_debugfs_term(struct prueth_emac *emac)
  * Description:
  * When debugfs is configured this routine creates dual emac debugfs files
  */
-
 int prueth_dualemac_debugfs_init(struct prueth_emac *emac)
 {
 	int rc = -1;
@@ -643,11 +726,10 @@ error:
 	return rc;
 }
 
-/* prueth_debugfs_term - Tear down debugfs intrastructure for emac stats
+/* prueth_debugfs_term - Remove debugfs files
  *
  * Description:
- * When Debufs is configured this routine removes debugfs file system
- * elements that are specific to prueth queue stats
+ * Routine to clean up the debugfs files
  */
 void
 prueth_debugfs_term(struct prueth_emac *emac)
@@ -659,13 +741,12 @@ prueth_debugfs_term(struct prueth_emac *emac)
 	emac->mc_filter_file = NULL;
 }
 
-/* prueth_debugfs_init - create  debugfs file for displaying queue stats
+/* prueth_debugfs_init - create  debugfs files to display debug info
  *
  * Description:
- * When debugfs is configured this routine dump the rx_packet_counts and
- * tx_packet_counts in the emac structures
+ * This routine creates various debugfs files to show debug information
+ * about the driver.
  */
-
 int prueth_debugfs_init(struct prueth_emac *emac)
 {
 	int rc = -1;

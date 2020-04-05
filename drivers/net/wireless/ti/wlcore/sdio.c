@@ -159,15 +159,21 @@ static int wl12xx_sdio_power_on(struct wl12xx_sdio_glue *glue)
 		pm_runtime_put_noidle(&card->dev);
 		dev_err(glue->dev, "%s: failed to get_sync(%d)\n",
 			__func__, ret);
-		goto out;
+
+		return ret;
 	}
 
 	sdio_claim_host(func);
+	/*
+	 * To guarantee that the SDIO card is power cycled, as required to make
+	 * the FW programming to succeed, let's do a brute force HW reset.
+	 */
+	mmc_hw_reset(card->host);
+
 	sdio_enable_func(func);
 	sdio_release_host(func);
 
-out:
-	return ret;
+	return 0;
 }
 
 static int wl12xx_sdio_power_off(struct wl12xx_sdio_glue *glue)
@@ -180,7 +186,8 @@ static int wl12xx_sdio_power_off(struct wl12xx_sdio_glue *glue)
 	sdio_release_host(func);
 
 	/* Let runtime PM know the card is powered off */
-	return pm_runtime_put_sync(&card->dev);
+	pm_runtime_put(&card->dev);
+	return 0;
 }
 
 static int wl12xx_sdio_set_power(struct device *child, bool enable)
@@ -459,7 +466,7 @@ static void __exit wl1271_exit(void)
 module_init(wl1271_init);
 module_exit(wl1271_exit);
 
-module_param(dump, bool, S_IRUSR | S_IWUSR);
+module_param(dump, bool, 0600);
 MODULE_PARM_DESC(dump, "Enable sdio read/write dumps.");
 
 MODULE_LICENSE("GPL");

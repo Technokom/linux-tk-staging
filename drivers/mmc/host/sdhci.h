@@ -144,14 +144,15 @@
 #define  SDHCI_INT_DATA_CRC	0x00200000
 #define  SDHCI_INT_DATA_END_BIT	0x00400000
 #define  SDHCI_INT_BUS_POWER	0x00800000
-#define  SDHCI_INT_ACMD12ERR	0x01000000
+#define  SDHCI_INT_AUTO_CMD_ERR	0x01000000
 #define  SDHCI_INT_ADMA_ERROR	0x02000000
 
 #define  SDHCI_INT_NORMAL_MASK	0x00007FFF
 #define  SDHCI_INT_ERROR_MASK	0xFFFF8000
 
 #define  SDHCI_INT_CMD_MASK	(SDHCI_INT_RESPONSE | SDHCI_INT_TIMEOUT | \
-		SDHCI_INT_CRC | SDHCI_INT_END_BIT | SDHCI_INT_INDEX)
+		SDHCI_INT_CRC | SDHCI_INT_END_BIT | SDHCI_INT_INDEX | \
+		SDHCI_INT_AUTO_CMD_ERR)
 #define  SDHCI_INT_DATA_MASK	(SDHCI_INT_DATA_END | SDHCI_INT_DMA_END | \
 		SDHCI_INT_DATA_AVAIL | SDHCI_INT_SPACE_AVAIL | \
 		SDHCI_INT_DATA_TIMEOUT | SDHCI_INT_DATA_CRC | \
@@ -166,7 +167,11 @@
 
 #define SDHCI_CQE_INT_MASK (SDHCI_CQE_INT_ERR_MASK | SDHCI_INT_CQE)
 
-#define SDHCI_ACMD12_ERR	0x3C
+#define SDHCI_AUTO_CMD_STATUS	0x3C
+#define  SDHCI_AUTO_CMD_TIMEOUT	0x00000002
+#define  SDHCI_AUTO_CMD_CRC	0x00000004
+#define  SDHCI_AUTO_CMD_END_BIT	0x00000008
+#define  SDHCI_AUTO_CMD_INDEX	0x00000010
 
 #define SDHCI_HOST_CONTROL2		0x3E
 #define  SDHCI_CTRL_UHS_MASK		0x0007
@@ -333,12 +338,12 @@ struct sdhci_adma2_64_desc {
 #define SDHCI_MAX_MRQS		2
 
 /*
- * 48bit command and 136 bit response in 400KHz clock should take 0.46ms.
+ * 48bit command and 136 bit response in 100KHz clock could take upto 2.48ms.
  * However since the start time of the command, the time between
  * command and response, and the time between response and start of data is
- * not known, set the command transfer time to 2ms.
+ * not known, set the command transfer time to 10ms.
  */
-#define MMC_CMD_TRANSFER_TIME	(2 * NSEC_PER_MSEC) /* max 2 ms */
+#define MMC_CMD_TRANSFER_TIME	(10 * NSEC_PER_MSEC) /* max 10 ms */
 
 enum sdhci_cookie {
 	COOKIE_UNMAPPED,
@@ -447,7 +452,7 @@ struct sdhci_host {
 #define SDHCI_QUIRK2_RSP_136_HAS_CRC			(1<<16)
 /*
  * Disable HW timeout if the requested timeout is more than the maximum
- * obtainable timeout
+ * obtainable timeout.
  */
 #define SDHCI_QUIRK2_DISABLE_HW_TIMEOUT			(1<<17)
 
@@ -500,6 +505,7 @@ struct sdhci_host {
 	bool bus_on;		/* Bus power prevents runtime suspend */
 	bool preset_enabled;	/* Preset is enabled */
 	bool pending_reset;	/* Cmd/data reset is pending */
+	bool irq_wake_enabled;	/* IRQ wakeup is enabled */
 
 	struct mmc_request *mrqs_done[SDHCI_MAX_MRQS];	/* Requests done */
 	struct mmc_command *cmd;	/* Current command */
@@ -537,8 +543,6 @@ struct sdhci_host {
 	unsigned int            ocr_avail_mmc;
 	u32 ocr_mask;		/* available voltages */
 
-	bool			hw_timeout_disabled;
-
 	unsigned		timing;		/* Current timing */
 
 	u32			thread_isr;
@@ -564,7 +568,7 @@ struct sdhci_host {
 	/* Host SDMA buffer boundary. */
 	u32			sdma_boundary;
 
-	unsigned long long	data_timeout;
+	u64			data_timeout;
 
 	unsigned long private[0] ____cacheline_aligned;
 };
@@ -738,7 +742,6 @@ void sdhci_enable_sdio_irq(struct mmc_host *mmc, int enable);
 #ifdef CONFIG_PM
 int sdhci_suspend_host(struct sdhci_host *host);
 int sdhci_resume_host(struct sdhci_host *host);
-void sdhci_enable_irq_wakeups(struct sdhci_host *host);
 int sdhci_runtime_suspend_host(struct sdhci_host *host);
 int sdhci_runtime_resume_host(struct sdhci_host *host);
 #endif
@@ -749,5 +752,10 @@ bool sdhci_cqe_irq(struct sdhci_host *host, u32 intmask, int *cmd_error,
 		   int *data_error);
 
 void sdhci_dumpregs(struct sdhci_host *host);
+
+void sdhci_start_tuning(struct sdhci_host *host);
+void sdhci_end_tuning(struct sdhci_host *host);
+void sdhci_reset_tuning(struct sdhci_host *host);
+void sdhci_send_tuning(struct sdhci_host *host, u32 opcode);
 
 #endif /* __SDHCI_HW_H */

@@ -22,10 +22,10 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
-#include <linux/pinctrl/consumer.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
+#include <linux/pinctrl/consumer.h>
 #include <linux/sys_soc.h>
 #include <linux/thermal.h>
 
@@ -116,6 +116,7 @@ struct sdhci_omap_host {
 
 	struct pinctrl		*pinctrl;
 	struct pinctrl_state	**pinctrl_state;
+	bool			is_tuning;
 };
 
 static void sdhci_omap_start_clock(struct sdhci_omap_host *omap_host);
@@ -221,8 +222,12 @@ static void sdhci_omap_conf_bus_power(struct sdhci_omap_host *omap_host,
 
 	/* wait 1ms */
 	timeout = ktime_add_ms(ktime_get(), SDHCI_OMAP_TIMEOUT);
-	while (!(sdhci_omap_readl(omap_host, SDHCI_OMAP_HCTL) & HCTL_SDBP)) {
-		if (WARN_ON(ktime_after(ktime_get(), timeout)))
+	while (1) {
+		bool timedout = ktime_after(ktime_get(), timeout);
+
+		if (sdhci_omap_readl(omap_host, SDHCI_OMAP_HCTL) & HCTL_SDBP)
+			break;
+		if (WARN_ON(timedout))
 			return;
 		usleep_range(5, 10);
 	}
@@ -286,23 +291,19 @@ static int sdhci_omap_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	struct sdhci_host *host = mmc_priv(mmc);
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_omap_host *omap_host = sdhci_pltfm_priv(pltfm_host);
-	struct device *dev = omap_host->dev;
 	struct thermal_zone_device *thermal_dev;
+	struct device *dev = omap_host->dev;
 	struct mmc_ios *ios = &mmc->ios;
 	u32 start_window = 0, max_window = 0;
 	bool single_point_failure = false;
+	bool dcrc_was_enabled = false;
 	u8 cur_match, prev_match = 0;
 	u32 length = 0, max_len = 0;
-	u32 ier = host->ier;
 	u32 phase_delay = 0;
 	int temperature;
 	int ret = 0;
 	u32 reg;
 	int i;
-
-	pltfm_host = sdhci_priv(host);
-	omap_host = sdhci_pltfm_priv(pltfm_host);
-	dev = omap_host->dev;
 
 	/* clock tuning is not needed for upto 52MHz */
 	if (ios->clock <= 52000000)
@@ -332,9 +333,12 @@ static int sdhci_omap_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	 * during the tuning procedure. So disable it during the
 	 * tuning procedure.
 	 */
-	ier &= ~SDHCI_INT_DATA_CRC | ~SDHCI_INT_DATA_END_BIT;
-	sdhci_writel(host, ier, SDHCI_INT_ENABLE);
-	sdhci_writel(host, ier, SDHCI_SIGNAL_ENABLE);
+	if (host->ier & SDHCI_INT_DATA_CRC) {
+		host->ier &= ~SDHCI_INT_DATA_CRC;
+		dcrc_was_enabled = true;
+	}
+
+	omap_host->is_tuning = true;
 
 	/*
 	 * Stage 1: Search for a maximum pass window ignoring any
@@ -351,7 +355,6 @@ static int sdhci_omap_execute_tuning(struct mmc_host *mmc, u32 opcode)
 			} else if (single_point_failure) {
 				/* ignore single point failure */
 				length++;
-				single_point_failure = false;
 			} else {
 				start_window = phase_delay;
 				length = 1;
@@ -447,14 +450,20 @@ single_failure_found:
 
 	sdhci_omap_set_dll(omap_host, phase_delay);
 
+	omap_host->is_tuning = false;
+
 	goto ret;
 
 tuning_error:
+	omap_host->is_tuning = false;
 	dev_err(dev, "Tuning failed\n");
 	sdhci_omap_disable_tuning(omap_host);
 
 ret:
 	sdhci_reset(host, SDHCI_RESET_CMD | SDHCI_RESET_DATA);
+	/* Reenable forbidden interrupt */
+	if (dcrc_was_enabled)
+		host->ier |= SDHCI_INT_DATA_CRC;
 	sdhci_writel(host, host->ier, SDHCI_INT_ENABLE);
 	sdhci_writel(host, host->ier, SDHCI_SIGNAL_ENABLE);
 	return ret;
@@ -738,8 +747,12 @@ static void sdhci_omap_init_74_clocks(struct sdhci_host *host, u8 power_mode)
 
 	/* wait 1ms */
 	timeout = ktime_add_ms(ktime_get(), SDHCI_OMAP_TIMEOUT);
-	while (!(sdhci_omap_readl(omap_host, SDHCI_OMAP_STAT) & INT_CC_EN)) {
-		if (WARN_ON(ktime_after(ktime_get(), timeout)))
+	while (1) {
+		bool timedout = ktime_after(ktime_get(), timeout);
+
+		if (sdhci_omap_readl(omap_host, SDHCI_OMAP_STAT) & INT_CC_EN)
+			break;
+		if (WARN_ON(timedout))
 			return;
 		usleep_range(5, 10);
 	}
@@ -772,6 +785,55 @@ static void sdhci_omap_set_uhs_signaling(struct sdhci_host *host,
 	sdhci_omap_start_clock(omap_host);
 }
 
+void sdhci_omap_reset(struct sdhci_host *host, u8 mask)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_omap_host *omap_host = sdhci_pltfm_priv(pltfm_host);
+
+	/* Don't reset data lines during tuning operation */
+	if (omap_host->is_tuning)
+		mask &= ~SDHCI_RESET_DATA;
+
+	sdhci_reset(host, mask);
+}
+
+#define CMD_ERR_MASK (SDHCI_INT_CRC | SDHCI_INT_END_BIT | SDHCI_INT_INDEX |\
+		      SDHCI_INT_TIMEOUT)
+#define CMD_MASK (CMD_ERR_MASK | SDHCI_INT_RESPONSE)
+
+static irqreturn_t sdhci_omap_irq(struct sdhci_host *host, u32 intmask)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_omap_host *omap_host = sdhci_pltfm_priv(pltfm_host);
+
+	if (omap_host->is_tuning && host->cmd && !host->data_early &&
+	    (intmask & CMD_ERR_MASK)) {
+
+		/*
+		 * Since we are not resetting data lines during tuning
+		 * operation, data error or data complete interrupts
+		 * might still arrive. Mark this request as a failure
+		 * but still wait for the data interrupt
+		 */
+		if (intmask & SDHCI_INT_TIMEOUT)
+			host->cmd->error = -ETIMEDOUT;
+		else
+			host->cmd->error = -EILSEQ;
+
+		host->cmd = NULL;
+
+		/*
+		 * Sometimes command error interrupts and command complete
+		 * interrupt will arrive together. Clear all command related
+		 * interrupts here.
+		 */
+		sdhci_writel(host, intmask & CMD_MASK, SDHCI_INT_STATUS);
+		intmask &= ~CMD_MASK;
+	}
+
+	return intmask;
+}
+
 static struct sdhci_ops sdhci_omap_ops = {
 	.set_clock = sdhci_omap_set_clock,
 	.set_power = sdhci_omap_set_power,
@@ -780,8 +842,9 @@ static struct sdhci_ops sdhci_omap_ops = {
 	.get_min_clock = sdhci_omap_get_min_clock,
 	.set_bus_width = sdhci_omap_set_bus_width,
 	.platform_send_init_74_clocks = sdhci_omap_init_74_clocks,
-	.reset = sdhci_reset,
+	.reset = sdhci_omap_reset,
 	.set_uhs_signaling = sdhci_omap_set_uhs_signaling,
+	.irq = sdhci_omap_irq,
 };
 
 static int sdhci_omap_set_capabilities(struct sdhci_omap_host *omap_host)
@@ -886,8 +949,10 @@ static int sdhci_omap_config_iodelay_pinctrl_state(struct sdhci_omap_host
 	if (!(omap_host->flags & SDHCI_OMAP_REQUIRE_IODELAY))
 		return 0;
 
-	pinctrl_state = devm_kzalloc(dev, sizeof(*pinctrl_state) *
-				     (MMC_TIMING_MMC_HS200 + 1), GFP_KERNEL);
+	pinctrl_state = devm_kcalloc(dev,
+				     MMC_TIMING_MMC_HS200 + 1,
+				     sizeof(*pinctrl_state),
+				     GFP_KERNEL);
 	if (!pinctrl_state)
 		return -ENOMEM;
 
@@ -931,8 +996,15 @@ static int sdhci_omap_config_iodelay_pinctrl_state(struct sdhci_omap_host
 
 	state = sdhci_omap_iodelay_pinctrl_state(omap_host, "ddr_1_8v", caps,
 						 MMC_CAP_1_8V_DDR);
-	if (!IS_ERR(state))
+	if (!IS_ERR(state)) {
 		pinctrl_state[MMC_TIMING_MMC_DDR52] = state;
+	} else {
+		state = sdhci_omap_iodelay_pinctrl_state(omap_host, "ddr_3_3v",
+							 caps,
+							 MMC_CAP_3_3V_DDR);
+		if (!IS_ERR(state))
+			pinctrl_state[MMC_TIMING_MMC_DDR52] = state;
+	}
 
 	state = sdhci_omap_iodelay_pinctrl_state(omap_host, "hs", caps,
 						 MMC_CAP_SD_HIGHSPEED);
@@ -1075,18 +1147,18 @@ static int sdhci_omap_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_put_sync;
 
-	if (host->quirks2 & SDHCI_QUIRK2_NO_1_8_V)
-		mmc->caps2 &= ~MMC_CAP2_HS200;
-
 	ret = sdhci_omap_config_iodelay_pinctrl_state(omap_host);
 	if (ret)
-		goto err_put_sync;
+		goto err_cleanup_host;
 
 	ret = __sdhci_add_host(host);
 	if (ret)
-		goto err_put_sync;
+		goto err_cleanup_host;
 
 	return 0;
+
+err_cleanup_host:
+	sdhci_cleanup_host(host);
 
 err_put_sync:
 	pm_runtime_put_sync(dev);

@@ -73,7 +73,7 @@
 		};
 		fdt@8 {
 			description = "AM57xx-evm Jailhouse overlay";
-			data = /incbin/("am572x-evm-jailhouse.dtbo");
+			data = /incbin/("am57xx-evm-jailhouse.dtbo");
 			type = "flat_dt";
 			arch = "arm";
 			compression = "none";

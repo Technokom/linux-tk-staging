@@ -55,12 +55,13 @@ struct ti_emif_pm_data {
 struct ti_emif_pm_functions {
 	u32 save_context;
 	u32 restore_context;
+	u32 run_hw_leveling;
 	u32 enter_sr;
 	u32 exit_sr;
 	u32 abort_sr;
 } __packed __aligned(8);
 
-static inline void ti_emif_offsets(void)
+static inline void ti_emif_asm_offsets(void)
 {
 	DEFINE(EMIF_SDCFG_VAL_OFFSET,
 	       offsetof(struct emif_regs_amx3, emif_sdcfg_val));
@@ -126,6 +127,8 @@ static inline void ti_emif_offsets(void)
 	       offsetof(struct ti_emif_pm_functions, save_context));
 	DEFINE(EMIF_PM_RESTORE_CONTEXT_OFFSET,
 	       offsetof(struct ti_emif_pm_functions, restore_context));
+	DEFINE(EMIF_PM_RUN_HW_LEVELING,
+	       offsetof(struct ti_emif_pm_functions, run_hw_leveling));
 	DEFINE(EMIF_PM_ENTER_SR_OFFSET,
 	       offsetof(struct ti_emif_pm_functions, enter_sr));
 	DEFINE(EMIF_PM_EXIT_SR_OFFSET,

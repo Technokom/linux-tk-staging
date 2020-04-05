@@ -381,7 +381,7 @@ enum dma_slave_buswidth {
  * @src_addr_width: this is the width in bytes of the source (RX)
  * register where DMA data shall be read. If the source
  * is memory this may be ignored depending on architecture.
- * Legal values: 1, 2, 4, 8.
+ * Legal values: 1, 2, 3, 4, 8, 16, 32, 64.
  * @dst_addr_width: same as src_addr_width but for destination
  * target (TX) mutatis mutandis.
  * @src_maxburst: the maximum number of words (note: words, as in
@@ -456,16 +456,20 @@ enum dma_residue_granularity {
 	DMA_RESIDUE_GRANULARITY_BURST = 2,
 };
 
-/* struct dma_slave_caps - expose capabilities of a slave channel only
- *
- * @src_addr_widths: bit mask of src addr widths the channel supports
- * @dst_addr_widths: bit mask of dstn addr widths the channel supports
- * @directions: bit mask of slave direction the channel supported
- * 	since the enum dma_transfer_direction is not defined as bits for each
- * 	type of direction, the dma controller should fill (1 << <TYPE>) and same
- * 	should be checked by controller as well
+/**
+ * struct dma_slave_caps - expose capabilities of a slave channel only
+ * @src_addr_widths: bit mask of src addr widths the channel supports.
+ *	Width is specified in bytes, e.g. for a channel supporting
+ *	a width of 4 the mask should have BIT(4) set.
+ * @dst_addr_widths: bit mask of dst addr widths the channel supports
+ * @directions: bit mask of slave directions the channel supports.
+ *	Since the enum dma_transfer_direction is not defined as bit flag for
+ *	each type, the dma controller should set BIT(<TYPE>) and same
+ *	should be checked by controller as well
  * @max_burst: max burst capability per-transfer
- * @cmd_pause: true, if pause and thereby resume is supported
+ * @cmd_pause: true, if pause is supported (i.e. for reading residue or
+ *	       for resume later)
+ * @cmd_resume: true, if resume is supported
  * @cmd_terminate: true, if terminate cmd is supported
  * @residue_granularity: granularity of the reported transfer residue
  * @descriptor_reuse: if a descriptor can be reused by client and
@@ -477,6 +481,7 @@ struct dma_slave_caps {
 	u32 directions;
 	u32 max_burst;
 	bool cmd_pause;
+	bool cmd_resume;
 	bool cmd_terminate;
 	enum dma_residue_granularity residue_granularity;
 	bool descriptor_reuse;
@@ -520,7 +525,11 @@ typedef void (*dma_async_tx_callback_result)(void *dma_async_param,
 				const struct dmaengine_result *result);
 
 struct dmaengine_unmap_data {
+#if IS_ENABLED(CONFIG_DMA_ENGINE_RAID)
+	u16 map_cnt;
+#else
 	u8 map_cnt;
+#endif
 	u8 to_cnt;
 	u8 from_cnt;
 	u8 bidi_cnt;
@@ -685,13 +694,13 @@ static inline struct dma_async_tx_descriptor *txd_next(struct dma_async_tx_descr
  * @residue: the remaining number of bytes left to transmit
  *	on the selected transfer for states DMA_IN_PROGRESS and
  *	DMA_PAUSED if this is implemented in the driver, else 0
- * @cached: amount of data in bytes cached by the DMA.
+ * @in_flight_bytes: amount of data in bytes cached by the DMA.
  */
 struct dma_tx_state {
 	dma_cookie_t last;
 	dma_cookie_t used;
 	u32 residue;
-	u32 cached;
+	u32 in_flight_bytes;
 };
 
 /**
@@ -752,11 +761,13 @@ struct dma_filter {
  * @dev_id: unique device ID
  * @dev: struct device reference for dma mapping api
  * @src_addr_widths: bit mask of src addr widths the device supports
+ *	Width is specified in bytes, e.g. for a device supporting
+ *	a width of 4 the mask should have BIT(4) set.
  * @dst_addr_widths: bit mask of dst addr widths the device supports
- * @directions: bit mask of slave direction the device supports since
- * 	the enum dma_transfer_direction is not defined as bits for
- * 	each type of direction, the dma controller should fill (1 <<
- * 	<TYPE>) and same should be checked by controller as well
+ * @directions: bit mask of slave directions the device supports.
+ *	Since the enum dma_transfer_direction is not defined as bit flag for
+ *	each type, the dma controller should set BIT(<TYPE>) and same
+ *	should be checked by controller as well
  * @max_burst: max burst capability per-transfer
  * @residue_granularity: granularity of the transfer residue reported
  *	by tx_status
@@ -977,7 +988,6 @@ static inline struct dma_async_tx_descriptor *dmaengine_prep_dma_memcpy(
 	return chan->device->device_prep_dma_memcpy(chan, dest, src,
 						    len, flags);
 }
-
 
 static inline bool dmaengine_is_metadata_mode_supported(struct dma_chan *chan,
 		enum dma_desc_metadata_mode mode)
@@ -1506,12 +1516,14 @@ static inline int dmaengine_desc_free(struct dma_async_tx_descriptor *desc)
 /* --- DMA device --- */
 
 int dma_async_device_register(struct dma_device *device);
+int dmaenginem_async_device_register(struct dma_device *device);
 void dma_async_device_unregister(struct dma_device *device);
 void dma_run_dependencies(struct dma_async_tx_descriptor *tx);
 struct dma_chan *dma_get_slave_channel(struct dma_chan *chan);
-struct dma_chan *dma_get_any_slave_channel(struct dma_device *device);
 struct dma_chan *dmadev_get_slave_channel(struct dma_device *device,
 					  dma_filter_fn fn, void *fn_param);
+#define dma_get_any_slave_channel(device) \
+	dmadev_get_slave_channel(device, NULL, NULL)
 #define dma_request_channel(mask, x, y) __dma_request_channel(&(mask), x, y)
 #define dma_request_slave_channel_compat(mask, x, y, dev, name) \
 	__dma_request_slave_channel_compat(&(mask), x, y, dev, name)

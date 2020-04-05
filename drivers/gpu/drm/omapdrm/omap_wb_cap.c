@@ -58,7 +58,7 @@ static bool is_input_active(struct wbcap_dev *wbcap)
 	struct omap_drm_private *priv = wbcap->dev->drm_dev->dev_private;
 	u32 oc = wb_inputs[wbcap->input].omap_channel;
 
-	return priv->dispc_ops->mgr_is_enabled(oc);
+	return priv->dispc_ops->mgr_is_enabled(priv->dispc, oc);
 }
 
 static bool is_input_enabled(struct wbcap_dev *wbcap)
@@ -68,7 +68,7 @@ static bool is_input_enabled(struct wbcap_dev *wbcap)
 	struct wb_input *input;
 
 	input = &wb_inputs[wbcap->input];
-	crtc = priv->crtcs[input->crtc_index];
+	crtc = priv->pipes[input->crtc_index].crtc;
 
 	return crtc->enabled;
 }
@@ -80,8 +80,8 @@ static void build_input_table(struct wbcap_dev *wbcap)
 	struct wb_input *input;
 	int i;
 
-	for (i = 0; i < priv->num_crtcs; i++) {
-		crtc = priv->crtcs[i];
+	for (i = 0; i < priv->num_pipes; i++) {
+		crtc = priv->pipes[i].crtc;
 		input = &wb_inputs[i];
 
 		input->crtc_index = i;
@@ -119,17 +119,17 @@ static bool wb_cap_setup(struct wbcap_dev *dev,
 	struct videomode *ct;
 	int r;
 
-	crtc = priv->crtcs[wb_inputs[dev->input].crtc_index];
+	crtc = priv->pipes[wb_inputs[dev->input].crtc_index].crtc;
 	ct = omap_crtc_timings(crtc);
 
 	/* configure wb */
-	r = priv->dispc_ops->wb_setup(wb_info, false, ct, wb_channel);
+	r = priv->dispc_ops->wb_setup(priv->dispc, wb_info, false, ct, wb_channel);
 	if (r)
 		return false;
 
 	if (is_input_active(dev)) {
-		priv->dispc_ops->ovl_enable(OMAP_DSS_WB, true);
-		priv->dispc_ops->wb_go();
+		priv->dispc_ops->ovl_enable(priv->dispc, OMAP_DSS_WB, true);
+		priv->dispc_ops->wb_go(priv->dispc);
 	} else {
 		log_err(dev, "CHANNEL %u not enabled, skip WB GO\n",
 			wb_inputs[dev->input].omap_channel);
@@ -143,7 +143,7 @@ static bool is_input_irq_vsync_set(struct wbcap_dev *dev, u32 irqstatus)
 	struct omap_drm_private *priv = dev->dev->drm_dev->dev_private;
 	u32 oc = wb_inputs[dev->input].omap_channel;
 
-	if (irqstatus & priv->dispc_ops->mgr_get_vsync_irq(oc))
+	if (irqstatus & priv->dispc_ops->mgr_get_vsync_irq(priv->dispc, oc))
 		return true;
 	return false;
 }
@@ -230,7 +230,7 @@ static enum hrtimer_restart wbcap_wbgo_timer(struct hrtimer *timer)
 					     struct wbcap_dev, wbgo_timer);
 	struct omap_drm_private *priv = dev->dev->drm_dev->dev_private;
 
-	if (priv->dispc_ops->wb_go_busy())
+	if (priv->dispc_ops->wb_go_busy(priv->dispc))
 		log_err(dev, "WARNING, WB BUSY at hrtimer, state %u\n",
 			dev->state);
 
@@ -264,7 +264,8 @@ static enum hrtimer_restart wbcap_wbgo_timer(struct hrtimer *timer)
 
 		if (dev->stopping) {
 			/* XXX should we set WB GO? */
-			priv->dispc_ops->ovl_enable(OMAP_DSS_WB, false);
+			priv->dispc_ops->ovl_enable(priv->dispc, OMAP_DSS_WB,
+						    false);
 			dev->state = WB_STATE_STOPPING;
 		} else {
 			wbcap_schedule_next_buffer(dev);
@@ -452,14 +453,14 @@ static int start_streaming(struct vb2_queue *vq, unsigned int count)
 	int ret;
 	struct wb_q_data *q_data;
 
-	priv->dispc_ops->runtime_get();
+	priv->dispc_ops->runtime_get(priv->dispc);
 
 	wbcap->sequence = 0;
 	q_data = get_q_data(wbcap, wbcap->queue.type);
 	if (!q_data) {
 		log_err(wbcap, "ERROR: getting q_data failed\n");
 		return_all_buffers(wbcap, VB2_BUF_STATE_QUEUED);
-		priv->dispc_ops->runtime_put();
+		priv->dispc_ops->runtime_put(priv->dispc);
 		return -EINVAL;
 	}
 
@@ -477,18 +478,18 @@ static int start_streaming(struct vb2_queue *vq, unsigned int count)
 		log_err(wbcap, "ERROR: Selected input (%s) is not active, bailing out\n",
 			wb_inputs[wbcap->input].name);
 		return_all_buffers(wbcap, VB2_BUF_STATE_QUEUED);
-		priv->dispc_ops->runtime_put();
+		priv->dispc_ops->runtime_put(priv->dispc);
 		return -EINVAL;
 	}
 
 	/* Enable vsync irq on the input crtc */
-	crtc = priv->crtcs[wb_inputs[wbcap->input].crtc_index];
+	crtc = priv->pipes[wb_inputs[wbcap->input].crtc_index].crtc;
 	ret = drm_crtc_vblank_get(crtc);
 	WARN_ON(ret != 0);
 
 	if (wbcap_schedule_next_buffer(wbcap)) {
 		return_all_buffers(wbcap, VB2_BUF_STATE_QUEUED);
-		priv->dispc_ops->runtime_put();
+		priv->dispc_ops->runtime_put(priv->dispc);
 		return -EINVAL;
 	}
 
@@ -518,17 +519,17 @@ static void stop_streaming(struct vb2_queue *vq)
 
 	log_dbg(wbcap, "Returning VB2 buffers\n");
 
-	if (priv->dispc_ops->wb_go_busy())
+	if (priv->dispc_ops->wb_go_busy(priv->dispc))
 		log_err(wbcap, "WARNING, WB BUSY when stopping\n");
 
 	/* Release all active buffers */
 	return_all_buffers(wbcap, VB2_BUF_STATE_ERROR);
 
 	/* Disable vsync irq on the input crtc */
-	crtc = priv->crtcs[wb_inputs[wbcap->input].crtc_index];
+	crtc = priv->pipes[wb_inputs[wbcap->input].crtc_index].crtc;
 	drm_crtc_vblank_put(crtc);
 
-	priv->dispc_ops->runtime_put();
+	priv->dispc_ops->runtime_put(priv->dispc);
 }
 
 /*
@@ -665,7 +666,7 @@ static int wbcap_try_fmt_vid_cap(struct file *file, void *priv,
 	 * So we are temporarily forcing the frame size to be the
 	 * same as the source crtc for now.
 	 */
-	crtc = drmpriv->crtcs[wb_inputs[wbcap->input].crtc_index];
+	crtc = drmpriv->pipes[wb_inputs[wbcap->input].crtc_index].crtc;
 	ct = omap_crtc_timings(crtc);
 
 	f->fmt.pix.width = ct->hactive;

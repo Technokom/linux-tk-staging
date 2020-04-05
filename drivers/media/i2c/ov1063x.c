@@ -718,46 +718,6 @@ static int ov1063x_enum_frame_sizes(struct v4l2_subdev *sd,
 	return 0;
 }
 
-static int ov1063x_g_parm(struct v4l2_subdev *sd, struct v4l2_streamparm *parms)
-{
-	struct i2c_client *client = v4l2_get_subdevdata(sd);
-	struct ov1063x_priv *priv = to_ov1063x(client);
-	struct v4l2_captureparm *cp = &parms->parm.capture;
-
-	if (parms->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
-		return -EINVAL;
-
-	memset(cp, 0, sizeof(struct v4l2_captureparm));
-	cp->capability = V4L2_CAP_TIMEPERFRAME;
-	cp->timeperframe.denominator = priv->fps_numerator;
-	cp->timeperframe.numerator = priv->fps_denominator;
-
-	return 0;
-}
-
-static int ov1063x_s_parm(struct v4l2_subdev *sd, struct v4l2_streamparm *parms)
-{
-	struct i2c_client *client = v4l2_get_subdevdata(sd);
-	struct ov1063x_priv *priv = to_ov1063x(client);
-	struct v4l2_captureparm *cp = &parms->parm.capture;
-	int ret;
-
-	if (parms->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
-		return -EINVAL;
-	if (cp->extendedmode != 0)
-		return -EINVAL;
-
-	/* FIXME Check we can handle the requested framerate */
-	priv->fps_denominator = cp->timeperframe.numerator;
-	priv->fps_numerator = cp->timeperframe.denominator;
-
-	ret = ov1063x_set_params(client, priv->width, priv->height);
-	if (ret < 0)
-		return ret;
-
-	return 0;
-}
-
 static int ov1063x_init_gpios(struct i2c_client *client)
 {
 	struct ov1063x_priv *priv = to_ov1063x(client);
@@ -890,8 +850,6 @@ static const char * const ov1063x_test_pattern_menu[] = {
 
 static const struct v4l2_subdev_video_ops ov1063x_subdev_video_ops = {
 	.s_stream	= ov1063x_s_stream,
-	.g_parm		= ov1063x_g_parm,
-	.s_parm		= ov1063x_s_parm,
 };
 
 static const struct v4l2_subdev_internal_ops ov1063x_sd_internal_ops = {
@@ -1081,7 +1039,7 @@ static const struct i2c_device_id ov1063x_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, ov1063x_id);
 
-#if defined(CONFIG_OF)
+#if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id ov1063x_dt_id[] = {
 	{
 		.compatible = "ovti,ov10635", .data = "ov10635"
@@ -1092,6 +1050,7 @@ static const struct of_device_id ov1063x_dt_id[] = {
 	{
 	}
 };
+MODULE_DEVICE_TABLE(of, ov1063x_dt_id);
 #endif
 
 static struct i2c_driver ov1063x_i2c_driver = {

@@ -2,7 +2,7 @@ Create local branch
 
 The below commit is used for this local branch and is the one used by
 this sdk:
-bde58ab01e3651529680af3eeea7e4d37cb94d40.
+5f8c1c6121da785bbe7ecc5896877a2537b5d6eb.
 
 To reduce the size of the SDK installer only a portion of the git commit
 history has been preserved. Also links to remote branches and tags do

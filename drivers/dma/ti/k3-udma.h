@@ -14,7 +14,7 @@
 #define UDMA_EMU_CTL_REG		0x8
 #define UDMA_PSIL_TO_REG		0x10
 #define UDMA_UTC_CTL_REG		0x1c
-#define UDMA_CAP_REG(i)			(0x20 + (i * 4))
+#define UDMA_CAP_REG(i)			(0x20 + ((i) * 4))
 #define UDMA_RX_FLOW_ID_FW_OES_REG	0x80
 #define UDMA_RX_FLOW_ID_FW_STATUS_REG	0x88
 
@@ -23,7 +23,7 @@
 #define UDMA_TCHAN_RT_SWTRIG_REG	0x8
 #define UDMA_TCHAN_RT_STDATA_REG	0x80
 
-#define UDMA_TCHAN_RT_PEERn_REG(i)	(0x200 + (i * 0x4))
+#define UDMA_TCHAN_RT_PEERn_REG(i)	(0x200 + ((i) * 0x4))
 #define UDMA_TCHAN_RT_PEER_STATIC_TR_XY_REG	\
 	UDMA_TCHAN_RT_PEERn_REG(0)	/* PSI-L: 0x400 */
 #define UDMA_TCHAN_RT_PEER_STATIC_TR_Z_REG	\
@@ -42,7 +42,7 @@
 #define UDMA_RCHAN_RT_SWTRIG_REG	0x8
 #define UDMA_RCHAN_RT_STDATA_REG	0x80
 
-#define UDMA_RCHAN_RT_PEERn_REG(i)	(0x200 + (i * 0x4))
+#define UDMA_RCHAN_RT_PEERn_REG(i)	(0x200 + ((i) * 0x4))
 #define UDMA_RCHAN_RT_PEER_STATIC_TR_XY_REG	\
 	UDMA_RCHAN_RT_PEERn_REG(0)	/* PSI-L: 0x400 */
 #define UDMA_RCHAN_RT_PEER_STATIC_TR_Z_REG	\
@@ -84,14 +84,14 @@
 #define PDMA_STATIC_TR_X(x)	\
 	(((x) << PDMA_STATIC_TR_X_SHIFT) & PDMA_STATIC_TR_X_MASK)
 
+#define PDMA_STATIC_TR_XY_ACC32		BIT(30)
+#define PDMA_STATIC_TR_XY_BURST		BIT(31)
+
 /*
  * UDMA_TCHAN_RT_PEER_STATIC_TR_Z_REG /
  * UDMA_RCHAN_RT_PEER_STATIC_TR_Z_REG
  */
-#define PDMA_STATIC_TR_Z_MASK		GENMASK(11, 0)
-#define PDMA_STATIC_TR_Z_SHIFT		(0)
-#define PDMA_STATIC_TR_Z(x)	\
-	(((x) << PDMA_STATIC_TR_Z_SHIFT) & PDMA_STATIC_TR_Z_MASK)
+#define PDMA_STATIC_TR_Z(x, mask)	((x) & (mask))
 
 /* Private API to UDMA via k3-udma-private */
 #include <linux/of.h>
@@ -114,6 +114,7 @@ enum udma_rm_range {
 enum udma_tp_level {
 	UDMA_TP_NORMAL = 0,
 	UDMA_TP_HIGH = 1,
+	UDMA_TP_ULTRAHIGH = 2,
 	UDMA_TP_LAST,
 };
 

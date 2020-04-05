@@ -2,7 +2,7 @@
 /*
  * Remote processor messaging
  *
- * Copyright (C) 2011-2018 Texas Instruments, Inc.
+ * Copyright (C) 2011-2019 Texas Instruments, Inc.
  * Copyright (C) 2011 Google, Inc.
  * All rights reserved.
  */

@@ -1992,8 +1992,8 @@ static void netcp_ethss_link_state_action(struct gbe_priv *gbe_dev,
 		netdev_printk(KERN_INFO, ndev, "Link is Down\n");
 	}
 
-	if ((slave->link_interface == XGMII_LINK_MAC_MAC_FORCED) ||
-	    ((slave->link_interface == SGMII_LINK_MAC_MAC_FORCED) && ndev)) {
+	if (slave->link_interface == XGMII_LINK_MAC_MAC_FORCED ||
+	    (slave->link_interface == SGMII_LINK_MAC_MAC_FORCED && ndev)) {
 		if (up) {
 			if (slave->link_recover_thresh ||
 			    slave->link_recovering) {
@@ -2230,7 +2230,7 @@ static int gbe_slave_open(struct gbe_intf *gbe_intf)
 
 	void (*hndlr)(struct net_device *) = gbe_adjust_link;
 
-	if (IS_SS_ID_VER_14(priv) || IS_SS_ID_NU(priv))
+	if (!IS_SS_ID_2U(priv))
 		gbe_sgmii_config(priv, slave);
 	gbe_port_reset(slave);
 	if (!IS_SS_ID_2U(priv))
@@ -2494,7 +2494,7 @@ static int gbe_txtstamp_mark_pkt(struct gbe_intf *gbe_intf,
 	struct gbe_priv *gbe_dev = gbe_intf->gbe_dev;
 
 	if (!(skb_shinfo(p_info->skb)->tx_flags & SKBTX_HW_TSTAMP) ||
-	    !cpts_is_tx_enabled(gbe_dev->cpts))
+	    !gbe_dev->tx_ts_enabled)
 		return 0;
 
 	/* If phy has the txtstamp api, assume it will do it.
@@ -2528,7 +2528,8 @@ static int gbe_rxtstamp(struct gbe_intf *gbe_intf, struct netcp_packet *p_info)
 		return 0;
 	}
 
-	if (!cpts_rx_timestamp(gbe_dev->cpts, p_info->skb))
+	if (gbe_dev->rx_ts_enabled &&
+	    !cpts_rx_timestamp(gbe_dev->cpts, p_info->skb))
 		p_info->rxtstamp_complete = true;
 
 	return 0;
@@ -2544,10 +2545,8 @@ static int gbe_hwtstamp_get(struct gbe_intf *gbe_intf, struct ifreq *ifr)
 		return -EOPNOTSUPP;
 
 	cfg.flags = 0;
-	cfg.tx_type = cpts_is_tx_enabled(cpts) ?
-		      HWTSTAMP_TX_ON : HWTSTAMP_TX_OFF;
-	cfg.rx_filter = (cpts_is_rx_enabled(cpts) ?
-			 cpts->rx_enable : HWTSTAMP_FILTER_NONE);
+	cfg.tx_type = gbe_dev->tx_ts_enabled ? HWTSTAMP_TX_ON : HWTSTAMP_TX_OFF;
+	cfg.rx_filter = gbe_dev->rx_ts_enabled;
 
 	return copy_to_user(ifr->ifr_data, &cfg, sizeof(cfg)) ? -EFAULT : 0;
 }
@@ -2558,8 +2557,8 @@ static void gbe_hwtstamp(struct gbe_intf *gbe_intf)
 	struct gbe_slave *slave = gbe_intf->slave;
 	u32 ts_en, seq_id, ctl;
 
-	if (!cpts_is_rx_enabled(gbe_dev->cpts) &&
-	    !cpts_is_tx_enabled(gbe_dev->cpts)) {
+	if (!gbe_dev->rx_ts_enabled &&
+	    !gbe_dev->tx_ts_enabled) {
 		writel(0, GBE_REG_ADDR(slave, port_regs, ts_ctl));
 		return;
 	}
@@ -2571,10 +2570,10 @@ static void gbe_hwtstamp(struct gbe_intf *gbe_intf)
 		(slave->ts_ctl.uni ?  TS_UNI_EN :
 			slave->ts_ctl.maddr_map << TS_CTL_MADDR_SHIFT);
 
-	if (cpts_is_tx_enabled(gbe_dev->cpts))
+	if (gbe_dev->tx_ts_enabled)
 		ts_en |= (TS_TX_ANX_ALL_EN | TS_TX_VLAN_LT1_EN);
 
-	if (cpts_is_rx_enabled(gbe_dev->cpts))
+	if (gbe_dev->rx_ts_enabled)
 		ts_en |= (TS_RX_ANX_ALL_EN | TS_RX_VLAN_LT1_EN);
 
 	writel(ts_en,  GBE_REG_ADDR(slave, port_regs, ts_ctl));
@@ -2600,10 +2599,10 @@ static int gbe_hwtstamp_set(struct gbe_intf *gbe_intf, struct ifreq *ifr)
 
 	switch (cfg.tx_type) {
 	case HWTSTAMP_TX_OFF:
-		cpts_tx_enable(cpts, 0);
+		gbe_dev->tx_ts_enabled = 0;
 		break;
 	case HWTSTAMP_TX_ON:
-		cpts_tx_enable(cpts, 1);
+		gbe_dev->tx_ts_enabled = 1;
 		break;
 	default:
 		return -ERANGE;
@@ -2611,12 +2610,12 @@ static int gbe_hwtstamp_set(struct gbe_intf *gbe_intf, struct ifreq *ifr)
 
 	switch (cfg.rx_filter) {
 	case HWTSTAMP_FILTER_NONE:
-		cpts_rx_enable(cpts, 0);
+		gbe_dev->rx_ts_enabled = HWTSTAMP_FILTER_NONE;
 		break;
 	case HWTSTAMP_FILTER_PTP_V1_L4_EVENT:
 	case HWTSTAMP_FILTER_PTP_V1_L4_SYNC:
 	case HWTSTAMP_FILTER_PTP_V1_L4_DELAY_REQ:
-		cpts_rx_enable(cpts, HWTSTAMP_FILTER_PTP_V1_L4_EVENT);
+		gbe_dev->rx_ts_enabled = HWTSTAMP_FILTER_PTP_V1_L4_EVENT;
 		cfg.rx_filter = HWTSTAMP_FILTER_PTP_V1_L4_EVENT;
 		break;
 	case HWTSTAMP_FILTER_PTP_V2_L4_EVENT:
@@ -2628,7 +2627,7 @@ static int gbe_hwtstamp_set(struct gbe_intf *gbe_intf, struct ifreq *ifr)
 	case HWTSTAMP_FILTER_PTP_V2_EVENT:
 	case HWTSTAMP_FILTER_PTP_V2_SYNC:
 	case HWTSTAMP_FILTER_PTP_V2_DELAY_REQ:
-		cpts_rx_enable(cpts, HWTSTAMP_FILTER_PTP_V2_EVENT);
+		gbe_dev->rx_ts_enabled = HWTSTAMP_FILTER_PTP_V2_EVENT;
 		cfg.rx_filter = HWTSTAMP_FILTER_PTP_V2_EVENT;
 		break;
 	default:
@@ -2801,9 +2800,9 @@ static int gbe_ioctl(void *intf_priv, struct ifreq *req, int cmd)
 	return -EOPNOTSUPP;
 }
 
-static void netcp_ethss_timer(unsigned long arg)
+static void netcp_ethss_timer(struct timer_list *t)
 {
-	struct gbe_priv *gbe_dev = (struct gbe_priv *)arg;
+	struct gbe_priv *gbe_dev = from_timer(gbe_dev, t, timer);
 	struct gbe_intf *gbe_intf;
 	struct gbe_slave *slave;
 
@@ -3177,7 +3176,6 @@ static void init_secondary_ports(struct gbe_priv *gbe_dev,
 		if (!slave->phy) {
 			dev_err(dev, "phy not found for slave %d\n",
 				slave->slave_num);
-			slave->phy = NULL;
 		} else {
 			dev_dbg(dev, "phy found: id is: 0x%s\n",
 				phydev_name(slave->phy));
@@ -3267,8 +3265,8 @@ static int set_xgbe_ethss10_priv(struct gbe_priv *gbe_dev,
 	gbe_dev->et_stats = xgbe10_et_stats;
 	gbe_dev->num_et_stats = ARRAY_SIZE(xgbe10_et_stats);
 
-	gbe_dev->hw_stats = devm_kzalloc(gbe_dev->dev,
-					 gbe_dev->num_et_stats * sizeof(u64),
+	gbe_dev->hw_stats = devm_kcalloc(gbe_dev->dev,
+					 gbe_dev->num_et_stats, sizeof(u64),
 					 GFP_KERNEL);
 	if (!gbe_dev->hw_stats) {
 		dev_err(gbe_dev->dev, "hw_stats memory allocation failed\n");
@@ -3276,8 +3274,8 @@ static int set_xgbe_ethss10_priv(struct gbe_priv *gbe_dev,
 	}
 
 	gbe_dev->hw_stats_prev =
-		devm_kzalloc(gbe_dev->dev,
-			     gbe_dev->num_et_stats * sizeof(u32),
+		devm_kcalloc(gbe_dev->dev,
+			     gbe_dev->num_et_stats, sizeof(u32),
 			     GFP_KERNEL);
 	if (!gbe_dev->hw_stats_prev) {
 		dev_err(gbe_dev->dev,
@@ -3427,8 +3425,8 @@ static int set_gbe_ethss14_priv(struct gbe_priv *gbe_dev,
 	gbe_dev->et_stats = gbe13_et_stats;
 	gbe_dev->num_et_stats = ARRAY_SIZE(gbe13_et_stats);
 
-	gbe_dev->hw_stats = devm_kzalloc(gbe_dev->dev,
-					 gbe_dev->num_et_stats * sizeof(u64),
+	gbe_dev->hw_stats = devm_kcalloc(gbe_dev->dev,
+					 gbe_dev->num_et_stats, sizeof(u64),
 					 GFP_KERNEL);
 	if (!gbe_dev->hw_stats) {
 		dev_err(gbe_dev->dev, "hw_stats memory allocation failed\n");
@@ -3436,8 +3434,8 @@ static int set_gbe_ethss14_priv(struct gbe_priv *gbe_dev,
 	}
 
 	gbe_dev->hw_stats_prev =
-		devm_kzalloc(gbe_dev->dev,
-			     gbe_dev->num_et_stats * sizeof(u32),
+		devm_kcalloc(gbe_dev->dev,
+			     gbe_dev->num_et_stats, sizeof(u32),
 			     GFP_KERNEL);
 	if (!gbe_dev->hw_stats_prev) {
 		dev_err(gbe_dev->dev,
@@ -3498,8 +3496,8 @@ static int set_gbenu_ethss_priv(struct gbe_priv *gbe_dev,
 		gbe_dev->num_et_stats = GBENU_ET_STATS_HOST_SIZE +
 					GBENU_ET_STATS_PORT_SIZE;
 
-	gbe_dev->hw_stats = devm_kzalloc(gbe_dev->dev,
-					 gbe_dev->num_et_stats * sizeof(u64),
+	gbe_dev->hw_stats = devm_kcalloc(gbe_dev->dev,
+					 gbe_dev->num_et_stats, sizeof(u64),
 					 GFP_KERNEL);
 	if (!gbe_dev->hw_stats) {
 		dev_err(gbe_dev->dev, "hw_stats memory allocation failed\n");
@@ -3507,8 +3505,8 @@ static int set_gbenu_ethss_priv(struct gbe_priv *gbe_dev,
 	}
 
 	gbe_dev->hw_stats_prev =
-		devm_kzalloc(gbe_dev->dev,
-			     gbe_dev->num_et_stats * sizeof(u32),
+		devm_kcalloc(gbe_dev->dev,
+			     gbe_dev->num_et_stats, sizeof(u32),
 			     GFP_KERNEL);
 	if (!gbe_dev->hw_stats_prev) {
 		dev_err(gbe_dev->dev,
@@ -3537,15 +3535,15 @@ static int set_gbenu_ethss_priv(struct gbe_priv *gbe_dev,
 
 	if (!IS_SS_ID_2U(gbe_dev)) {
 		if (gbe_dev->ss_regs) {
-			gbe_dev->sgmii_port_regs = gbe_dev->ss_regs +
-						   GBENU_SGMII_MODULE_OFFSET;
+			gbe_dev->sgmii_port_regs =
+				gbe_dev->ss_regs + GBENU_SGMII_MODULE_OFFSET;
 		} else {
 			ret = of_address_to_resource(node,
 						     GBENU_SGMII_REG_INDEX,
 						     &res);
 			if (ret) {
 				dev_err(gbe_dev->dev,
-					"Can't xlate of node(%s) addr @ %d\n",
+					"Can't xslate of node(%s) addr at %d\n",
 					node->name, GBENU_SGMII_REG_INDEX);
 				return ret;
 			}
@@ -3553,7 +3551,7 @@ static int set_gbenu_ethss_priv(struct gbe_priv *gbe_dev,
 			regs = devm_ioremap_resource(gbe_dev->dev, &res);
 			if (IS_ERR(regs)) {
 				dev_err(gbe_dev->dev,
-					"Failed to map sgmii port reg base\n");
+					"Failed to map gbenu sgmii reg base\n");
 				return PTR_ERR(regs);
 			}
 			gbe_dev->sgmii_port_regs = regs;
@@ -3697,12 +3695,16 @@ static int gbe_probe(struct netcp_device *netcp_device, struct device *dev,
 
 	ret = netcp_txpipe_init(&gbe_dev->tx_pipe, netcp_device,
 				gbe_dev->dma_chan_name, gbe_dev->tx_queue_id);
-	if (ret)
-		goto exit_err;
+	if (ret) {
+		of_node_put(interfaces);
+		return ret;
+	}
 
 	ret = netcp_txpipe_open(&gbe_dev->tx_pipe);
-	if (ret)
-		goto exit_err;
+	if (ret) {
+		of_node_put(interfaces);
+		return ret;
+	}
 
 	/* Create network interfaces */
 	INIT_LIST_HEAD(&gbe_dev->gbe_intf_head);
@@ -3785,10 +3787,7 @@ static int gbe_probe(struct netcp_device *netcp_device, struct device *dev,
 	ret = gbe_create_sysfs_entries(gbe_dev);
 	if (ret)
 		goto free_sec_ports;
-
-	init_timer(&gbe_dev->timer);
-	gbe_dev->timer.data	 = (unsigned long)gbe_dev;
-	gbe_dev->timer.function = netcp_ethss_timer;
+	timer_setup(&gbe_dev->timer, netcp_ethss_timer, 0);
 	gbe_dev->timer.expires	 = jiffies + GBE_TIMER_INTERVAL;
 	add_timer(&gbe_dev->timer);
 	*inst_priv = gbe_dev;
@@ -3797,7 +3796,6 @@ static int gbe_probe(struct netcp_device *netcp_device, struct device *dev,
 
 free_sec_ports:
 	free_secondary_ports(gbe_dev);
-exit_err:
 	return ret;
 }
 

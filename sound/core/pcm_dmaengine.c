@@ -265,7 +265,7 @@ snd_pcm_uframes_t snd_dmaengine_pcm_pointer(struct snd_pcm_substream *substream)
 			pos = buf_size - state.residue;
 
 		sample_bytes = (sample_bytes / 8) * runtime->channels;
-		runtime->delay = state.cached / sample_bytes;
+		runtime->delay = state.in_flight_bytes / sample_bytes;
 	}
 
 	return bytes_to_frames(substream->runtime, pos);

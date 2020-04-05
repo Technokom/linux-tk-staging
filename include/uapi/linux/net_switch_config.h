@@ -1,19 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Texas Instruments Ethernet Switch Driver
  *
- * Copyright (C) 2014 Texas Instruments
+ * Copyright (C) 2014-2018 Texas Instruments, Inc
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
- *
- * This program is distributed "as is" WITHOUT ANY WARRANTY of any
- * kind, whether express or implied; without even the implied warranty
- * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- */
-
-/*
  * Userspace API for Switch Configuration
  */
 
@@ -56,6 +46,7 @@ struct net_switch_config {
 	unsigned char	untag_port;	/* Untag ports */
 	unsigned char	addr[6];
 	unsigned int	super;
+	struct ethtool_cmd ecmd;
 	unsigned char	unknown_vlan_member;
 	unsigned char	unknown_vlan_untag;
 	unsigned int	unknown_vlan_unreg_multi;
@@ -66,7 +57,6 @@ struct net_switch_config {
 	unsigned int	bcast_rate_limit;
 	unsigned int	mcast_rate_limit;
 	bool		direction;
-	struct ethtool_cmd ecmd;
 
 	unsigned int ret_type;   /* Return  Success/Failure */
 };

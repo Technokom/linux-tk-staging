@@ -1,9 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
 /* Copyright 2011-2014 Autronica Fire and Security AS
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the Free
- * Software Foundation; either version 2 of the License, or (at your option)
- * any later version.
  *
  * Author(s):
  *	2011-2014 Arvid Brodin, arvid.brodin@alten.se
@@ -74,8 +70,7 @@ static bool hsr_prp_check_carrier(struct hsr_prp_port *master)
 
 	rcu_read_lock();
 	hsr_prp_for_each_port(master->priv, port)
-		if (port->type != HSR_PRP_PT_MASTER &&
-		    is_slave_up(port->dev)) {
+		if (port->type != HSR_PRP_PT_MASTER && is_slave_up(port->dev)) {
 			has_carrier = true;
 			break;
 		}
@@ -89,23 +84,22 @@ static bool hsr_prp_check_carrier(struct hsr_prp_port *master)
 	return has_carrier;
 }
 
-static void hsr_prp_check_announce(struct net_device *priv_dev,
+static void hsr_prp_check_announce(struct net_device *ndev,
 				   unsigned char old_operstate)
 {
 	struct hsr_prp_priv *priv;
 
-	priv = netdev_priv(priv_dev);
+	priv = netdev_priv(ndev);
 
-	if (priv_dev->operstate == IF_OPER_UP &&
-	    old_operstate != IF_OPER_UP) {
+	if (ndev->operstate == IF_OPER_UP && old_operstate != IF_OPER_UP) {
 		/* Went up */
 		priv->announce_count = 0;
-		priv->announce_timer.expires = jiffies +
-				msecs_to_jiffies(HSR_PRP_ANNOUNCE_INTERVAL);
-		add_timer(&priv->announce_timer);
+		mod_timer(&priv->announce_timer,
+			  jiffies +
+			  msecs_to_jiffies(HSR_PRP_ANNOUNCE_INTERVAL));
 	}
 
-	if (priv_dev->operstate != IF_OPER_UP && old_operstate == IF_OPER_UP)
+	if (ndev->operstate != IF_OPER_UP && old_operstate == IF_OPER_UP)
 		/* Went down */
 		del_timer(&priv->announce_timer);
 }
@@ -198,15 +192,15 @@ static int _hsr_prp_lredev_get_node_table(struct hsr_prp_priv *priv,
 	rcu_read_lock();
 
 	list_for_each_entry_rcu(node, &priv->node_db, mac_list) {
-		if (hsr_prp_addr_is_self(priv, node->mac_address_a))
+		if (hsr_prp_addr_is_self(priv, node->macaddress_A))
 			continue;
 		memcpy(&table[i].mac_address[0],
-		       &node->mac_address_a[0], ETH_ALEN);
+		       &node->macaddress_A[0], ETH_ALEN);
 		table[i].time_last_seen_a = node->time_in[HSR_PRP_PT_SLAVE_A];
 		table[i].time_last_seen_b = node->time_in[HSR_PRP_PT_SLAVE_B];
-		if (priv->prot_ver == PRP_V1)
+		if (priv->prot_version == PRP_V1)
 			table[i].node_type = IEC62439_3_DANP;
-		else if (priv->prot_ver <= HSR_V1)
+		else if (priv->prot_version <= HSR_V1)
 			table[i].node_type = IEC62439_3_DANH;
 		else
 			continue;
@@ -292,6 +286,7 @@ static int hsr_prp_dev_change_mtu(struct net_device *dev, int new_mtu)
 
 	priv = netdev_priv(dev);
 	master = hsr_prp_get_port(priv, HSR_PRP_PT_MASTER);
+
 	max = hsr_prp_get_max_mtu(priv);
 	if (new_mtu > max) {
 		netdev_info(master->dev,
@@ -401,8 +396,6 @@ static int hsr_prp_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 	master = hsr_prp_get_port(priv, HSR_PRP_PT_MASTER);
 	skb->dev = master->dev;
 	hsr_prp_forward_skb(skb, master);
-	master->dev->stats.tx_packets++;
-	master->dev->stats.tx_bytes += skb->len;
 	INC_CNT_RX_C(priv);
 
 	return NETDEV_TX_OK;
@@ -414,11 +407,11 @@ static const struct header_ops hsr_prp_header_ops = {
 };
 
 static void send_supervision_frame(struct hsr_prp_port *master,
-				   u8 type, u8 prot_ver)
+				   u8 type, u8 proto_ver)
 {
 	struct sk_buff *skb;
 	int hlen, tlen;
-	struct hsr_tag *hsr_tag;
+	struct hsr_tag *hsr_tag = NULL;
 	struct vlan_hdr *vhdr;
 	struct prp_rct *rct;
 	struct hsr_prp_sup_tag *hsr_stag;
@@ -452,18 +445,18 @@ static void send_supervision_frame(struct hsr_prp_port *master,
 		return;
 
 	skb_reserve(skb, hlen);
+	skb->dev = master->dev;
 	if (priv->use_vlan_for_sv) {
 		proto = ETH_P_8021Q;
 		skb->priority = priv->sv_frame_pcp;
 	} else {
-		if (!prot_ver)
+		if (!proto_ver)
 			proto = ETH_P_PRP;
 		else
-			proto = (prot_ver == HSR_V1) ? ETH_P_HSR : ETH_P_PRP;
+			proto = (proto_ver == HSR_V1) ? ETH_P_HSR : ETH_P_PRP;
 		skb->priority = TC_PRIO_CONTROL;
 	}
 	skb->protocol = htons(proto);
-	skb->dev = master->dev;
 
 	if (dev_hard_header(skb, skb->dev, proto,
 			    priv->sup_multicast_addr,
@@ -478,30 +471,32 @@ static void send_supervision_frame(struct hsr_prp_port *master,
 		vlan_tci |= (priv->sv_frame_pcp	<< VLAN_PRIO_SHIFT);
 		if (priv->sv_frame_dei)
 			vlan_tci |= VLAN_CFI_MASK;
-		if (!prot_ver)
+		if (!proto_ver)
 			proto = ETH_P_PRP;
 		else
-			proto = (prot_ver == HSR_V1) ? ETH_P_HSR : ETH_P_PRP;
+			proto = (proto_ver == HSR_V1) ? ETH_P_HSR : ETH_P_PRP;
 		vhdr->h_vlan_TCI = htons(vlan_tci);
 		vhdr->h_vlan_encapsulated_proto = htons(proto);
 	}
 
-	if (prot_ver == HSR_V1) {
+	if (proto_ver == HSR_V1) {
 		hsr_tag = skb_put(skb, sizeof(struct hsr_tag));
 		hsr_tag->encap_proto = htons(ETH_P_PRP);
 		set_hsr_tag_LSDU_size(hsr_tag, HSR_PRP_V1_SUP_LSDUSIZE);
 	}
 
 	hsr_stag = skb_put(skb, sizeof(struct hsr_prp_sup_tag));
-	set_hsr_stag_path(hsr_stag, (prot_ver ? 0x0 : 0xf));
-	set_hsr_stag_HSR_ver(hsr_stag, prot_ver ? 0x1 : 0x0);
+	set_hsr_stag_path(hsr_stag, (proto_ver ? 0x0 : 0xf));
+	set_hsr_stag_HSR_ver(hsr_stag, proto_ver ? 0x1 : 0x0);
 
 	/* From HSRv1 on we have separate supervision sequence numbers. */
-	spin_lock_irqsave(&master->priv->seqnr_lock, irqflags);
-	if (prot_ver > 0) {
-		hsr_stag->sequence_nr = htons(master->priv->sup_sequence_nr);
-		master->priv->sup_sequence_nr++;
-		if (prot_ver == HSR_V1) {
+	spin_lock_irqsave(&priv->seqnr_lock, irqflags);
+	if (proto_ver > 0) {
+		hsr_stag->sequence_nr = htons(priv->sup_sequence_nr);
+		if (hsr_tag)
+			hsr_tag->sequence_nr = htons(priv->sequence_nr);
+		priv->sup_sequence_nr++;
+		if (proto_ver == HSR_V1) {
 			hsr_tag->sequence_nr = htons(priv->sequence_nr);
 			priv->sequence_nr++;
 		}
@@ -513,12 +508,12 @@ static void send_supervision_frame(struct hsr_prp_port *master,
 
 	hsr_stag->HSR_TLV_type = type;
 	/* TODO: Why 12 in HSRv0? */
-	hsr_stag->HSR_TLV_length = prot_ver ?
-		sizeof(struct hsr_prp_sup_payload) : 12;
+	hsr_stag->HSR_TLV_length = proto_ver ?
+					sizeof(struct hsr_prp_sup_payload) : 12;
 
-	/* Payload: mac_address_a */
+	/* Payload: MacAddressA */
 	hsr_sp = skb_put(skb, sizeof(struct hsr_prp_sup_payload));
-	ether_addr_copy(hsr_sp->mac_address_a, master->dev->dev_addr);
+	ether_addr_copy(hsr_sp->macaddress_A, master->dev->dev_addr);
 
 	if (!priv->use_vlan_for_sv) {
 		if (skb_put_padto(skb, ETH_ZLEN + HSR_PRP_HLEN))
@@ -529,7 +524,7 @@ static void send_supervision_frame(struct hsr_prp_port *master,
 	}
 
 	spin_lock_irqsave(&priv->seqnr_lock, irqflags);
-	if (prot_ver == PRP_V1) {
+	if (proto_ver == PRP_V1) {
 		tail = skb_tail_pointer(skb) - HSR_PRP_HLEN;
 		rct = (struct prp_rct *)tail;
 		rct->PRP_suffix = htons(ETH_P_PRP);
@@ -538,7 +533,6 @@ static void send_supervision_frame(struct hsr_prp_port *master,
 		priv->sequence_nr++;
 	}
 	spin_unlock_irqrestore(&priv->seqnr_lock, irqflags);
-
 	hsr_prp_forward_skb(skb, master);
 	INC_CNT_TX_SUP(priv);
 	return;
@@ -550,41 +544,40 @@ out:
 
 /* Announce (supervision frame) timer function
  */
-static void hsr_prp_announce(unsigned long data)
+static void hsr_prp_announce(struct timer_list *t)
 {
 	struct hsr_prp_priv *priv;
 	struct hsr_prp_port *master;
+	unsigned long interval;
 
-	priv = (struct hsr_prp_priv *)data;
+	priv = from_timer(priv, t, announce_timer);
 
 	rcu_read_lock();
 	master = hsr_prp_get_port(priv, HSR_PRP_PT_MASTER);
 
-	if (priv->announce_count < 3 && priv->prot_ver == HSR_V0) {
+	if (priv->announce_count < 3 && priv->prot_version == HSR_V0) {
 		send_supervision_frame(master, HSR_TLV_ANNOUNCE,
-				       priv->prot_ver);
+				       priv->prot_version);
 		priv->announce_count++;
 
-		priv->announce_timer.expires = jiffies +
-			msecs_to_jiffies(HSR_PRP_ANNOUNCE_INTERVAL);
+		interval = msecs_to_jiffies(HSR_PRP_ANNOUNCE_INTERVAL);
 	} else {
-		if (priv->prot_ver <= HSR_V1)
+		if (priv->prot_version <= HSR_V1)
 			send_supervision_frame(master, HSR_TLV_LIFE_CHECK,
-					       priv->prot_ver);
+					       priv->prot_version);
 		else /* PRP */
 			send_supervision_frame(master,
 					       (priv->dd_mode ==
 						IEC62439_3_DD) ?
 						PRP_TLV_LIFE_CHECK_DD :
 						PRP_TLV_LIFE_CHECK_DA,
-						priv->prot_ver);
+						priv->prot_version);
 
-		priv->announce_timer.expires = jiffies +
-			msecs_to_jiffies(HSR_PRP_LIFE_CHECK_INTERVAL);
+		interval = msecs_to_jiffies(HSR_PRP_LIFE_CHECK_INTERVAL);
 	}
 
 	if (is_admin_up(master->dev))
-		add_timer(&priv->announce_timer);
+		mod_timer(&priv->announce_timer, jiffies + interval);
 
 	rcu_read_unlock();
 }
@@ -592,15 +585,16 @@ static void hsr_prp_announce(unsigned long data)
 /* According to comments in the declaration of struct net_device, this function
  * is "Called from unregister, can be used to call free_netdev". Ok then...
  */
-static void hsr_prp_dev_destroy(struct net_device *hsr_prp_dev)
+static void hsr_prp_dev_destroy(struct net_device *ndev)
 {
 	struct hsr_prp_priv *priv;
 	struct hsr_prp_port *port;
 
-	priv = netdev_priv(hsr_prp_dev);
+	priv = netdev_priv(ndev);
 
-	hsr_prp_remove_procfs(priv, hsr_prp_dev);
+	hsr_prp_remove_procfs(priv, ndev);
 	hsr_prp_debugfs_term(priv);
+
 	rtnl_lock();
 	hsr_prp_for_each_port(priv, port)
 		hsr_prp_del_port(port);
@@ -900,8 +894,8 @@ int hsr_prp_dev_finalize(struct net_device *hsr_prp_dev,
 	if (res < 0)
 		return res;
 
-	priv->prot_ver = protocol_version;
-	if (priv->prot_ver == PRP_V1) {
+	priv->prot_version = protocol_version;
+	if (priv->prot_version == PRP_V1) {
 		/* For PRP, lan_id has most significant 3 bits holding
 		 * the net_id of PRP_LAN_ID and also duplicate discard
 		 * mode set.
@@ -917,12 +911,9 @@ int hsr_prp_dev_finalize(struct net_device *hsr_prp_dev,
 	priv->sequence_nr = HSR_PRP_SEQNR_START;
 	priv->sup_sequence_nr = HSR_PRP_SUP_SEQNR_START;
 
-	setup_timer(&priv->announce_timer, hsr_prp_announce,
-		    (unsigned long)priv);
-
+	timer_setup(&priv->announce_timer, hsr_prp_announce, 0);
 	if (!priv->rx_offloaded)
-		setup_timer(&priv->prune_timer, hsr_prp_prune_nodes,
-			    (unsigned long)priv);
+		timer_setup(&priv->prune_timer, hsr_prp_prune_nodes, 0);
 
 	ether_addr_copy(priv->sup_multicast_addr, def_multicast_addr);
 	priv->sup_multicast_addr[ETH_ALEN - 1] = multicast_spec;
@@ -947,19 +938,19 @@ int hsr_prp_dev_finalize(struct net_device *hsr_prp_dev,
 
 	res = hsr_prp_add_port(priv, hsr_prp_dev, HSR_PRP_PT_MASTER);
 	if (res)
-		return res;
+		goto err_add_port;
 
-	if (priv->prot_ver == PRP_V1) {
+	if (priv->prot_version == PRP_V1) {
 		if ((slave[0]->features & NETIF_F_HW_HSR_RX_OFFLOAD) ||
 		    (slave[1]->features & NETIF_F_HW_HSR_RX_OFFLOAD)) {
 			res = -EINVAL;
-			goto fail;
+			goto err_add_port;
 		}
 	} else {
 		if ((slave[0]->features & NETIF_F_HW_PRP_RX_OFFLOAD) ||
 		    (slave[1]->features & NETIF_F_HW_PRP_RX_OFFLOAD)) {
 			res = -EINVAL;
-			goto fail;
+			goto err_add_port;
 		}
 	}
 
@@ -977,9 +968,9 @@ int hsr_prp_dev_finalize(struct net_device *hsr_prp_dev,
 	}
 
 	/* HSR LRE L2 forward offload supported in lower device for hsr? */
-	if ((priv->prot_ver < PRP_V1) &&
+	if (priv->prot_version < PRP_V1 &&
 	    ((slave[0]->features & NETIF_F_HW_L2FW_DOFFLOAD) &&
-	     (slave[1]->features & NETIF_F_HW_L2FW_DOFFLOAD)))
+	    (slave[1]->features & NETIF_F_HW_L2FW_DOFFLOAD)))
 		priv->l2_fwd_offloaded = true;
 
 	hsr_prp_dev->features |= NETIF_F_HW_VLAN_CTAG_FILTER;
@@ -998,15 +989,19 @@ int hsr_prp_dev_finalize(struct net_device *hsr_prp_dev,
 	 * at the hardware or firmware . So don't do this in software
 	 */
 	if (!priv->rx_offloaded)
-		mod_timer(&priv->prune_timer,
-			  jiffies + msecs_to_jiffies(HSR_PRP_PRUNE_PERIOD));
+		mod_timer(&priv->prune_timer, jiffies +
+			  msecs_to_jiffies(HSR_PRP_PRUNE_PERIOD));
 	/* for offloaded case, expect both slaves have the
 	 * same MAC address configured. If not fail.
 	 */
 	if (priv->rx_offloaded &&
 	    !ether_addr_equal(slave[0]->dev_addr,
-			      slave[1]->dev_addr))
+			      slave[1]->dev_addr)) {
+		netdev_err(hsr_prp_dev,
+			   "Slave's MAC addr must be same. So change it\n");
+		res = -EINVAL;
 		goto fail;
+	}
 
 	res = hsr_prp_create_procfs(priv, hsr_prp_dev);
 	if (res)
@@ -1029,6 +1024,8 @@ fail_procfs:
 fail:
 	hsr_prp_for_each_port(priv, port)
 		hsr_prp_del_port(port);
+err_add_port:
+	hsr_prp_del_node(&priv->self_node_db);
 
 	return res;
 }

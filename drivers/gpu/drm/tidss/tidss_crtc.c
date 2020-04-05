@@ -12,7 +12,6 @@
 #include <drm/drm_fb_cma_helper.h>
 #include <drm/drm_gem_cma_helper.h>
 #include <drm/drm_plane_helper.h>
-#include <uapi/linux/media-bus-format.h>
 
 #include "tidss_crtc.h"
 #include "tidss_dispc.h"
@@ -51,8 +50,6 @@ static void tidss_crtc_finish_page_flip(struct tidss_crtc *tcrtc)
 		return;
 	}
 
-	dev_dbg(ddev->dev, "%s\n", __func__);
-
 	drm_crtc_send_vblank_event(&tcrtc->crtc, event);
 
 	spin_unlock_irqrestore(&ddev->event_lock, flags);
@@ -84,7 +81,6 @@ void tidss_crtc_error_irq(struct drm_crtc *crtc, u64 irqstatus)
 			    tcrtc->hw_videoport, irqstatus);
 }
 
-
 /* -----------------------------------------------------------------------------
  * CRTC Functions
  */
@@ -95,8 +91,6 @@ static int tidss_crtc_atomic_check(struct drm_crtc *crtc,
 	struct tidss_crtc *tcrtc = to_tidss_crtc(crtc);
 	struct drm_device *ddev = crtc->dev;
 	struct tidss_device *tidss = ddev->dev_private;
-	const struct drm_display_mode *mode = &state->adjusted_mode;
-	struct tidss_crtc_state *tcrtc_state = to_tidss_crtc_state(state);
 	int r;
 
 	dev_dbg(ddev->dev, "%s\n", __func__);
@@ -104,77 +98,16 @@ static int tidss_crtc_atomic_check(struct drm_crtc *crtc,
 	if (!state->enable)
 		return 0;
 
-	if (tcrtc_state->trans_key_mode) {
-		struct drm_plane *plane;
-		struct drm_plane_state *plane_state;
-		u32 zpos_mask = 0;
-
-		/*
-		 * We cannot use normalized zpos with transparency key
-		 * so lets use the original zpos and check that they
-		 * are not overlapping.
-		 */
-		drm_for_each_plane_mask(plane, crtc->dev, state->plane_mask) {
-			plane_state = drm_atomic_get_plane_state(state->state,
-								 plane);
-			if (IS_ERR(plane_state))
-				return PTR_ERR(plane_state);
-			if (zpos_mask & BIT(plane_state->zpos))
-				return -EINVAL;
-
-			zpos_mask |= BIT(plane_state->zpos);
-			plane_state->normalized_zpos = plane_state->zpos;
-		}
-	}
-
-	r = tidss->dispc_ops->vp_check_config(tidss->dispc, tcrtc->hw_videoport,
-					      mode,
-					      tcrtc_state->bus_format,
-					      tcrtc_state->bus_flags);
-
-	if (r == 0)
-		return 0;
-
-	dev_err(ddev->dev, "%s: failed (%ux%u pclk %u kHz)\n",
-		__func__, mode->hdisplay, mode->vdisplay, mode->clock);
+	r = tidss->dispc_ops->vp_check(tidss->dispc, tcrtc->hw_videoport,
+				       state);
 
 	return r;
-}
-
-static void tidss_crtc_atomic_begin(struct drm_crtc *crtc,
-				    struct drm_crtc_state *old_crtc_state)
-{
-	struct drm_device *ddev = crtc->dev;
-
-	dev_dbg(ddev->dev, "%s\n", __func__);
-}
-
-static void tidss_crtc_set_vp_state(struct drm_crtc *crtc)
-{
-	struct tidss_crtc *tcrtc = to_tidss_crtc(crtc);
-	struct tidss_crtc_state *tcrtc_state = to_tidss_crtc_state(crtc->state);
-	struct drm_device *ddev = crtc->dev;
-	struct tidss_device *tidss = ddev->dev_private;
-	struct tidss_vp_info vp_info = { 0 };
-
-	vp_info.default_color = tcrtc_state->background_color;
-	vp_info.trans_key_mode = tcrtc_state->trans_key_mode;
-	vp_info.trans_key = tcrtc_state->trans_key;
-
-	tidss->dispc_ops->vp_setup(tidss->dispc,
-				   tcrtc->hw_videoport,
-				   &vp_info);
-
-	tidss->dispc_ops->vp_set_color_mgmt(tidss->dispc,
-					    tcrtc->hw_videoport,
-					    crtc->state);
 }
 
 static void tidss_crtc_atomic_flush(struct drm_crtc *crtc,
 				    struct drm_crtc_state *old_crtc_state)
 {
 	struct tidss_crtc *tcrtc = to_tidss_crtc(crtc);
-	struct tidss_crtc_state *tcrtc_state = to_tidss_crtc_state(crtc->state);
 	struct drm_device *ddev = crtc->dev;
 	struct tidss_device *tidss = ddev->dev_private;
 
@@ -185,13 +118,17 @@ static void tidss_crtc_atomic_flush(struct drm_crtc *crtc,
 	if (!tcrtc->enabled)
 		return;
 
-	WARN_ON(tidss->dispc_ops->vp_go_busy(tidss->dispc,
-					     tcrtc->hw_videoport));
+	/* If the GO bit is stuck we better quit here. */
+	if (WARN_ON(tidss->dispc_ops->vp_go_busy(tidss->dispc,
+						 tcrtc->hw_videoport)))
+		return;
 
-	// I think we always need the event to signal flip done
+	/* We should have event if CRTC is enabled through out this commit. */
 	WARN_ON(!crtc->state->event);
 
-	tidss_crtc_set_vp_state(crtc);
+	tidss->dispc_ops->vp_setup(tidss->dispc,
+				   tcrtc->hw_videoport,
+				   crtc->state);
 
 	WARN_ON(drm_crtc_vblank_get(crtc) != 0);
 
@@ -210,7 +147,6 @@ static void tidss_crtc_atomic_enable(struct drm_crtc *crtc,
 				     struct drm_crtc_state *old_state)
 {
 	struct tidss_crtc *tcrtc = to_tidss_crtc(crtc);
-	struct tidss_crtc_state *tcrtc_state = to_tidss_crtc_state(crtc->state);
 	struct drm_device *ddev = crtc->dev;
 	struct tidss_device *tidss = ddev->dev_private;
 	const struct drm_display_mode *mode = &crtc->state->adjusted_mode;
@@ -222,28 +158,27 @@ static void tidss_crtc_atomic_enable(struct drm_crtc *crtc,
 
 	r = tidss->dispc_ops->vp_set_clk_rate(tidss->dispc, tcrtc->hw_videoport,
 					      mode->clock * 1000);
-	WARN_ON(r);
+	if (r != 0)
+		return;
 
 	r = tidss->dispc_ops->vp_enable_clk(tidss->dispc, tcrtc->hw_videoport);
-	WARN_ON(r);
+	if (r != 0)
+		return;
 
-	tidss_crtc_set_vp_state(crtc);
+	tidss->dispc_ops->vp_setup(tidss->dispc, tcrtc->hw_videoport,
+				   crtc->state);
 
 	/* Turn vertical blanking interrupt reporting on. */
 	drm_crtc_vblank_on(crtc);
 
 	if (tidss->dispc_ops->vp_prepare)
 		tidss->dispc_ops->vp_prepare(tidss->dispc, tcrtc->hw_videoport,
-					     mode,
-					     tcrtc_state->bus_format,
-					     tcrtc_state->bus_flags);
+					     crtc->state);
 
 	tcrtc->enabled = true;
 
 	tidss->dispc_ops->vp_enable(tidss->dispc, tcrtc->hw_videoport,
-				    mode,
-				    tcrtc_state->bus_format,
-				    tcrtc_state->bus_flags);
+				    crtc->state);
 
 	spin_lock_irq(&ddev->event_lock);
 
@@ -291,13 +226,6 @@ static void tidss_crtc_atomic_disable(struct drm_crtc *crtc,
 	tidss->dispc_ops->vp_disable_clk(tidss->dispc, tcrtc->hw_videoport);
 
 	tidss->dispc_ops->runtime_put(tidss->dispc);
-
-	spin_lock_irq(&crtc->dev->event_lock);
-	if (crtc->state->event) {
-		drm_crtc_send_vblank_event(crtc, crtc->state->event);
-		crtc->state->event = NULL;
-	}
-	spin_unlock_irq(&crtc->dev->event_lock);
 }
 
 static
@@ -308,14 +236,13 @@ enum drm_mode_status tidss_crtc_mode_valid(struct drm_crtc *crtc,
 	struct drm_device *ddev = crtc->dev;
 	struct tidss_device *tidss = ddev->dev_private;
 
-	return tidss->dispc_ops->vp_check_mode(tidss->dispc,
+	return tidss->dispc_ops->vp_mode_valid(tidss->dispc,
 					       tcrtc->hw_videoport,
 					       mode);
 }
 
 static const struct drm_crtc_helper_funcs crtc_helper_funcs = {
 	.atomic_check = tidss_crtc_atomic_check,
-	.atomic_begin = tidss_crtc_atomic_begin,
 	.atomic_flush = tidss_crtc_atomic_flush,
 	.atomic_enable = tidss_crtc_atomic_enable,
 	.atomic_disable = tidss_crtc_atomic_disable,
@@ -325,14 +252,21 @@ static const struct drm_crtc_helper_funcs crtc_helper_funcs = {
 
 static void tidss_crtc_reset(struct drm_crtc *crtc)
 {
+	struct tidss_crtc_state *tcrtc;
+
 	if (crtc->state)
 		__drm_atomic_helper_crtc_destroy_state(crtc->state);
 
 	kfree(crtc->state);
-	crtc->state = kzalloc(sizeof(struct tidss_crtc_state), GFP_KERNEL);
 
-	if (crtc->state)
-		crtc->state->crtc = crtc;
+	tcrtc = kzalloc(sizeof(*tcrtc), GFP_KERNEL);
+	if (!tcrtc) {
+		crtc->state = NULL;
+		return;
+	}
+
+	crtc->state = &tcrtc->base;
+	crtc->state->crtc = crtc;
 }
 
 static struct drm_crtc_state *
@@ -354,10 +288,6 @@ tidss_crtc_duplicate_state(struct drm_crtc *crtc)
 	state->bus_format = current_state->bus_format;
 	state->bus_flags = current_state->bus_flags;
 
-	state->background_color = current_state->background_color;
-	state->trans_key_mode = current_state->trans_key_mode;
-	state->trans_key = current_state->trans_key;
-
 	return &state->base;
 }
 
@@ -367,20 +297,7 @@ static int tidss_crtc_atomic_set_property(struct drm_crtc *crtc,
 					  struct drm_property *property,
 					  uint64_t val)
 {
-	struct drm_device *ddev = crtc->dev;
-	struct tidss_device *tidss = ddev->dev_private;
-	struct tidss_crtc_state *tidss_state = to_tidss_crtc_state(state);
-
-	if (property == tidss->trans_key_mode_prop)
-		tidss_state->trans_key_mode = val;
-	else if (property == tidss->trans_key_prop)
-		tidss_state->trans_key = val;
-	else if (property == tidss->background_color_prop)
-		tidss_state->background_color = val;
-	else
-		return -EINVAL;
-
-	return 0;
+	return -EINVAL;
 }
 
 static int tidss_crtc_atomic_get_property(struct drm_crtc *crtc,
@@ -388,20 +305,7 @@ static int tidss_crtc_atomic_get_property(struct drm_crtc *crtc,
 					  struct drm_property *property,
 					  uint64_t *val)
 {
-	struct drm_device *ddev = crtc->dev;
-	struct tidss_device *tidss = ddev->dev_private;
-	struct tidss_crtc_state *tidss_state = to_tidss_crtc_state(state);
-
-	if (property == tidss->trans_key_mode_prop)
-		*val = tidss_state->trans_key_mode;
-	else if (property == tidss->trans_key_prop)
-		*val = tidss_state->trans_key;
-	else if (property == tidss->background_color_prop)
-		*val = tidss_state->background_color;
-	else
-		return -EINVAL;
-
-	return 0;
+	return -EINVAL;
 }
 
 static int tidss_crtc_enable_vblank(struct drm_crtc *crtc)
@@ -447,22 +351,15 @@ static void tidss_crtc_install_properties(struct tidss_device *tidss,
 					  const struct tidss_vp_feat *vp_feat,
 					  struct drm_crtc *crtc)
 {
-	struct drm_mode_object *obj = &crtc->base;
-
-	if (vp_feat->has_trans_key) {
-		drm_object_attach_property(obj, tidss->trans_key_mode_prop, 0);
-		drm_object_attach_property(obj, tidss->trans_key_prop, 0);
-	}
-	drm_object_attach_property(obj, tidss->background_color_prop, 0);
 }
 
 struct tidss_crtc *tidss_crtc_create(struct tidss_device *tidss, u32 hw_videoport,
-				     struct drm_plane *primary, struct device_node *epnode)
+				     struct drm_plane *primary)
 {
 	struct tidss_crtc *tcrtc;
 	struct drm_crtc *crtc;
 	const struct tidss_vp_feat *vp_feat;
-	uint gamma_lut_size = 0;
+	unsigned int gamma_lut_size = 0;
 	int ret;
 
 	vp_feat = tidss->dispc_ops->vp_feat(tidss->dispc, hw_videoport);
@@ -484,7 +381,7 @@ struct tidss_crtc *tidss_crtc_create(struct tidss_device *tidss, u32 hw_videopor
 	drm_crtc_helper_add(crtc, &crtc_helper_funcs);
 
 	/*
-	 * The dispc API adapts to what ever size we ask from in no
+	 * The dispc API adapts to what ever size we ask from it no
 	 * matter what HW supports. X-server assumes 256 element gamma
 	 * tables so lets use that. Size of HW gamma table size is
 	 * found from struct tidss_vp_feat that is extracted with

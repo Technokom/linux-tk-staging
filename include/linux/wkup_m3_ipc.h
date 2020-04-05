@@ -46,8 +46,7 @@ struct wkup_m3_ipc {
 	struct mbox_chan *mbox;
 
 	struct wkup_m3_ipc_ops *ops;
-	bool is_rtc_only;
-
+	int is_rtc_only;
 	struct dentry *dbg_path;
 };
 
