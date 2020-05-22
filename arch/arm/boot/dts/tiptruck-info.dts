@@ -217,6 +217,13 @@
 		>;
 	};
 
+    /* periph_reset */
+   	periph_pin_reset: periph_reset {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0x9fc, PIN_OUTPUT | MUX_MODE7) /* (AE23) cam1_data5_gpio4[19] */
+		>;
+	};
+
     /* uart1 modem */
     uart1_pins_default: uart1_pins_default {
 		pinctrl-single,pins = <
@@ -224,10 +231,6 @@
 			AM4372_IOPAD(0x9ec, PIN_OUTPUT | MUX_MODE1) /* (AC21) cam1_data1.uart1_txd */
 			AM4372_IOPAD(0x9f0, PIN_INPUT_PULLUP | MUX_MODE1) /* (AD21) cam1_data2.uart1_ctsn */
 			AM4372_IOPAD(0x9f4, PIN_OUTPUT | MUX_MODE1) /* (AE22) cam1_data3.uart1_rtsn */
-			AM4372_IOPAD(0xa00, PIN_INPUT | MUX_MODE1) /* (AD23) cam1_data6.uart1_dcdn */
-			AM4372_IOPAD(0x9fc, PIN_INPUT | MUX_MODE1) /* (AE23) cam1_data5.uart1_dsrn */
-			AM4372_IOPAD(0xa04, PIN_OUTPUT | MUX_MODE1) /* (AE24) cam1_data7.uart1_dtrn */
-			AM4372_IOPAD(0x9f8, PIN_INPUT | MUX_MODE1) /* (AD22) cam1_data4.uart1_rin */
 		>;
 	};
 
@@ -331,6 +334,16 @@
 		>;
 	};
 
+
+    /* pfo */
+	pfo_pin_interrupt: pfo_pin_interrupt {
+		pinctrl-single,pins = <
+	        AM4372_IOPAD(0x9bc, PIN_INPUT | MUX_MODE7) /* (AD17) cam0_wen.gpio4[3] */
+		>;
+	};
+
+
+
     /* cam0 */
 	vpfe0_pins_default: vpfe0_pins_default {
 		pinctrl-single,pins = <
@@ -352,7 +365,7 @@
 	vpfe0_pins_control_default: vpfe0_pins_control_default {
 		pinctrl-single,pins = <
             AM4372_IOPAD(0x9b8, PIN_INPUT | MUX_MODE7) /* (AC18) cam0_field.gpio4[2] */
-			AM4372_IOPAD(0x9bc, PIN_OUTPUT_PULLUP | MUX_MODE7) /* (AD17) cam0_wen.gpio4[3] */
+
 			AM4372_IOPAD(0x9e0, PIN_INPUT | MUX_MODE7) /* (AC25) cam1_field.gpio4[12] */
 			AM4372_IOPAD(0x9e4, PIN_OUTPUT_PULLUP | MUX_MODE7) /* (AB25) cam1_wen.gpio4[13] */
 		>;
@@ -608,7 +621,13 @@
 
 &gpio4 {
 	status = "okay";
-    pinctrl-0 = <&gpio4_input_pins_default>;
+    pinctrl-0 = <&gpio4_input_pins_default &periph_pin_reset &pfo_pin_interrupt>;
+	p19 {
+		gpio-hog;
+		gpios = <19 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "periph_reset";
+	};
 };
 
 &gpio5 {
