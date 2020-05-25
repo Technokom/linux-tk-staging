@@ -33,6 +33,7 @@
 		default-brightness-level = <15>;
 	};
 
+
 	lcd0: display {
 		compatible = "osddisplays,osd057T0559-34ts", "panel-dpi";
 		label = "lcd";
@@ -63,6 +64,19 @@
 			};
 		};
 	};
+
+    leds {
+		pinctrl-names = "default";
+		pinctrl-0 = <&led_pins_default>;
+
+		compatible = "gpio-leds";
+
+		ok_led {
+			label = "ok_led";
+			gpios = <&gpio1 21 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+		};
+    };
 
 	sound0: sound@0 {
 		compatible = "simple-audio-card";
@@ -267,6 +281,12 @@
 			AM4372_IOPAD(0x99c, PIN_INPUT | MUX_MODE7) /* (M24) mcasp0_ahclkr.gpio3[17] */
 		>;
     };
+
+    led_pins_default: led_pins_default {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0x854, PIN_OUTPUT_PULLDOWN | MUX_MODE7) /* (E7) gpmc_a5.gpio1[21] */
+		>;
+	};
 
     /* Buzzer */
     buzzer_output_pins_default: pinmux_buzzer_output_pins_default {
@@ -499,21 +519,6 @@
 		};
 	};
 
-    bq25892: bq25892@6b {
-        compatible = "ti,bq25892";
-        reg = <0x6b>;
-		interrupt-parent = <&gpio2>;
-		interrupts = <3 IRQ_TYPE_LEVEL_HIGH>;
-        ti,battery-regulation-voltage = <4200000>;
-        ti,charge-current = <500000>;
-        ti,termination-current = <50000>;
-        ti,precharge-current = <128000>;
-        ti,minimum-sys-voltage = <3600000>;
-        ti,boost-voltage = <5000000>;
-        ti,boost-max-current = <1000000>;
-        ti,thermal-regulation-threshold = <120>;
-		system-power-controller;
-    };
 };
 
 &vpfe0 {
@@ -831,7 +836,7 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&spi2_pins>;
 	status = "okay";
-	ti,spi-num-cs = <3>;
+	ti,spi-num-cs = <2>;
 	ti,pindir-d0-out-d1-in;
 
 	can2: can@0 {
@@ -839,10 +844,18 @@
 		reg = <0>;
         spi-max-frequency = <24000000>;
 		clocks = <&sc_mstrclk>;
+		interrupt-parent = <&gpio2>;
+		interrupts = <5 IRQ_TYPE_EDGE_FALLING>;
+	};
+
+	can3: can@1 {
+		compatible = "microchip,mcp2517fd";
+		reg = <1>;
+        spi-max-frequency = <24000000>;
+		clocks = <&sc_mstrclk>;
 		interrupt-parent = <&gpio5>;
 		interrupts = <11 IRQ_TYPE_EDGE_FALLING>;
 	};
-
 
 };
 
