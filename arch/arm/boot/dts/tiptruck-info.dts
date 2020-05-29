@@ -17,6 +17,12 @@
 		display0 = &lcd0;
 	};
 
+	spi_can_clk: mclk_osc {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <20000000>;
+	};
+
 	vmmcwl_fixed: fixedregulator-mmcwl {
 		compatible = "regulator-fixed";
 		regulator-name = "vmmcwl_fixed";
@@ -260,7 +266,7 @@
         pinctrl-single,pins = <
 		    AM4372_IOPAD(0x92c, PIN_INPUT_PULLUP | MUX_MODE1 ) /* (D14) mii1_tx_clk.uart2_rxd */
     		AM4372_IOPAD(0x930, PIN_OUTPUT_PULLDOWN | MUX_MODE1 ) /* (D13) mii1_rx_clk.uart2_txd */
-    		AM4372_IOPAD(0x834,  PIN_OUTPUT_PULLDOWN | MUX_MODE7 ) /* (C11) gpmc_ad13.gpio1[13] */
+    		AM4372_IOPAD(0x834,  PIN_OUTPUT | MUX_MODE7 ) /* (C11) gpmc_ad13.gpio1[13] */
 	    >;
     };
 
@@ -269,7 +275,7 @@
         pinctrl-single,pins = <
             AM4372_IOPAD(0x968, PIN_INPUT_PULLUP | MUX_MODE1) /* (L25) uart0_ctsn.uart4_rxd */
 			AM4372_IOPAD(0x96c, PIN_OUTPUT_PULLDOWN | MUX_MODE1) /* (J25) uart0_rtsn.uart4_txd */
-            AM4372_IOPAD(0x830, PIN_OUTPUT_PULLDOWN | MUX_MODE7) /* (E11) gpmc_ad12.gpio1[12] */
+            AM4372_IOPAD(0x830, PIN_OUTPUT | MUX_MODE7) /* (E11) gpmc_ad12.gpio1[12] */
 	    >;
     };
 
@@ -454,8 +460,8 @@
             AM4372_IOPAD(0xa60, PIN_INPUT_PULLUP | MUX_MODE0) /* (N20) spi2_sclk.spi2_sclk */
 			AM4372_IOPAD(0xa64, PIN_INPUT | MUX_MODE0) /* (P22) spi2_d0.spi2_d0 */
 			AM4372_IOPAD(0xa68, PIN_INPUT | MUX_MODE0) /* (P20) spi2_d1.spi2_d1 */
-			AM4372_IOPAD(0xa6c, PIN_INPUT | MUX_MODE0) /* (T23) spi2_cs0.spi2_cs0 */
-			AM4372_IOPAD(0x9d8, PIN_INPUT | MUX_MODE4) /* (AC23) cam1_vd.spi2_cs2 */
+			AM4372_IOPAD(0xa6c, PIN_OUTPUT | MUX_MODE0) /* (T23) spi2_cs0.spi2_cs0 */
+			AM4372_IOPAD(0x9d8, PIN_OUTPUT | MUX_MODE4) /* (AC23) cam1_vd.spi2_cs2 */
 
             AM4372_IOPAD(0xa44, PIN_INPUT_PULLUP | MUX_MODE7) /* (F23) gpio5_11.gpio5[11] brige 4*/
             AM4372_IOPAD(0x89c, PIN_INPUT_PULLUP | MUX_MODE7) /* (C10) gpmc_be0n_cle.gpio2[5] brige 5*/
@@ -737,7 +743,7 @@
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart2_pins>;
-    rts-gpio = <&gpio1 24 GPIO_ACTIVE_HIGH>;
+    rts-gpio = <&gpio1 13 GPIO_ACTIVE_HIGH>;
     rs485-rts-active-high;
     rs485-rts-delay = <0 0>;
     linux,rs485-enabled-at-boot-time;
@@ -836,23 +842,29 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&spi2_pins>;
 	status = "okay";
-	ti,spi-num-cs = <2>;
+	ti,spi-num-cs = <3>;
 	ti,pindir-d0-out-d1-in;
 
-	can2: can@0 {
+	dmas = <&edma_xbar 28 0 16>,
+		   <&edma_xbar 29 0 17>,
+           <&edma_xbar 48 0 20>,
+		   <&edma_xbar 49 0 21>;
+	dma-names = "tx0", "rx0", "tx2", "rx2";
+
+	can0: can@0 {
 		compatible = "microchip,mcp2517fd";
 		reg = <0>;
-        spi-max-frequency = <24000000>;
-		clocks = <&sc_mstrclk>;
+        spi-max-frequency = <20000000>;
+		clocks = <&spi_can_clk>;
 		interrupt-parent = <&gpio2>;
 		interrupts = <5 IRQ_TYPE_EDGE_FALLING>;
 	};
 
-	can3: can@1 {
+	can2: can@2 {
 		compatible = "microchip,mcp2517fd";
-		reg = <1>;
-        spi-max-frequency = <24000000>;
-		clocks = <&sc_mstrclk>;
+		reg = <2>;
+        spi-max-frequency = <20000000>;
+		clocks = <&spi_can_clk>;
 		interrupt-parent = <&gpio5>;
 		interrupts = <11 IRQ_TYPE_EDGE_FALLING>;
 	};
