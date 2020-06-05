@@ -263,10 +263,10 @@
 			AM4372_IOPAD(0x97c, PIN_INPUT_PULLUP | SLEWCTRL_FAST | MUX_MODE3)  /* (L22) uart1_rtsn.I2C2_SCL */
 			AM4372_IOPAD(0x978, PIN_INPUT_PULLUP | SLEWCTRL_FAST | MUX_MODE3)  /* (K22) uart1_ctsn.I2C2_SDA */
 
-            AM4372_IOPAD(0xa60, PIN_INPUT_PULLUP | MUX_MODE7) /* (N20) spi2_sclk.gpio3[24] interrupt lis3dh*/
+            AM4372_IOPAD(0xa60, PIN_INPUT_PULLUP | MUX_MODE7) /* (N20) spi2_sclk.gpio3[24] interrupt lsm6d*/
 
             AM4372_IOPAD(0xa00, PIN_OUTPUT | MUX_MODE7) /* (AD23) cam1_data6.gpio4[20] powerdown adv7513*/
-            AM4372_IOPAD(0x9f4, PIN_INPUT | MUX_MODE7) /* (AE22) cam1_data3.gpio4[17] interrupt adv7513*/
+            AM4372_IOPAD(0x9fc, PIN_INPUT | MUX_MODE7) /* (AE23) cam1_data5.gpio4[19] */
 		>;
 	};
 
@@ -348,6 +348,11 @@
 		>;
 	};
 
+    periph_pin_reset: periph_reset {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0x994, PIN_OUTPUT | MUX_MODE7) /* (N22) mcasp0_fsx.gpio3[15] */
+		>;
+	};
 
 
 	dss_pins: dss_pins {
@@ -389,8 +394,12 @@
 
 	uart1_pins: uart1_pins {
 		pinctrl-single,pins = <
-			AM4372_IOPAD(0x9e8, PIN_INPUT_PULLUP | MUX_MODE1 ) /* (AB20) cam1_data0.uart1_rxd */
-			AM4372_IOPAD(0x9ec, PIN_OUTPUT_PULLDOWN | MUX_MODE1 ) /* (AC21) cam1_data1.uart1_txd */
+            AM4372_IOPAD(0x9e8, PIN_INPUT | MUX_MODE1) /* (AB20) cam1_data0.uart1_rxd */
+			AM4372_IOPAD(0x9ec, PIN_OUTPUT_PULLDOWN | MUX_MODE1) /* (AC21) cam1_data1.uart1_txd */
+			AM4372_IOPAD(0x9f0, PIN_INPUT_PULLUP | MUX_MODE1) /* (AD21) cam1_data2.uart1_ctsn */
+			AM4372_IOPAD(0x9f4, PIN_OUTPUT_PULLDOWN | MUX_MODE1) /* (AE22) cam1_data3.uart1_rtsn */
+
+            AM4372_IOPAD(0x858, PIN_OUTPUT | MUX_MODE7) /* (E8) gpmc_a6.gpio1[22] bt enable*/
 		>;
 	};
 
@@ -445,9 +454,9 @@
 	wlan_pins_default: pinmux_wlan_pins_default {
 		pinctrl-single,pins = <
 			AM4372_IOPAD(0x868, PIN_INPUT  | WAKEUP_ENABLE | MUX_MODE7 ) /* (G8) gpmc_a10.gpio1[26] */
-			AM4372_IOPAD(0x858, PIN_OUTPUT | MUX_MODE7 ) /* (E8) gpmc_a6.gpio1[22] */
 			AM4372_IOPAD(0x85c, PIN_OUTPUT | MUX_MODE7 ) /* (F6) gpmc_a7.gpio1[23] */
-			AM4372_IOPAD(0x890, PIN_OUTPUT | MUX_MODE7 ) /* (A9) gpmc_advn_ale.gpio2[2] power wifi enable*/
+
+            AM4372_IOPAD(0x894, PIN_OUTPUT | MUX_MODE7) /* (E10) gpmc_oen_ren.gpio2[3] power wifi global enable*/
 		>;
 	};
 
@@ -491,7 +500,6 @@
 			AM4372_IOPAD(0x958, PIN_INPUT_PULLUP | MUX_MODE0)           /* spi0_d1.spi0_d1 */
 			AM4372_IOPAD(0x95c, PIN_INPUT_PULLUP | MUX_MODE0)          /* spi0_cs0.spi0_cs0 */
 			AM4372_IOPAD(0x9cc, PIN_INPUT_PULLUP | MUX_MODE7)
-			AM4372_IOPAD(0x994, PIN_OUTPUT | MUX_MODE7) 
 		>;
 	};
 
@@ -543,24 +551,20 @@
 	pinctrl-0 = <&i2c2_pins_default>;
 	clock-frequency = <400000>;
 
-	lis3dh: accelerometer@18 {
-		compatible = "st,lis3dh-accel";
-		reg = <0x18>;
+    lsm6dsm@6a {
+    	compatible = "st,lsm6dsm";
+	    reg = <0x6a>;
+    	interrupt-parent = <&gpio3>;
+    	interrupts = <24 IRQ_TYPE_EDGE_RISING>;
+    };
 
-		interrupt-parent = <&gpio3>;
-		interrupts = <24 IRQ_TYPE_EDGE_BOTH>;
-
-		rotation-matrix = "0", "-1", "0",
-				  "1", "0", "0",
-				  "0", "0", "1";
-	};
 
     adv7513: adv7513@39 {
 		compatible = "omapdss,adi,adv7513";
 		reg = <0x39>;
 
 		interrupt-parent = <&gpio4>;
-		interrupts = <17 IRQ_TYPE_EDGE_FALLING>;
+		interrupts = <19 IRQ_TYPE_EDGE_FALLING>;
 
         pd-gpio = <&gpio4 20 GPIO_ACTIVE_HIGH>;
 
@@ -642,9 +646,9 @@
 &gpio2 {
 	status = "okay";
 	pinctrl-0 = <&modem_pin_usb_enable /* &gpio2_input_pins_default */>;
-	p2 {
+	p3 {
 		gpio-hog;
-		gpios = <2 GPIO_ACTIVE_HIGH>;
+		gpios = <3 GPIO_ACTIVE_HIGH>;
 		output-high;
 		line-name = "PowerWiFiEnable";
 	};
@@ -653,7 +657,7 @@
 
 &gpio3 {
 	status = "okay";
-	pinctrl-0 = <&sim_pin_change &gpio3_output_pins_default &periph_pin_enable>;
+	pinctrl-0 = <&sim_pin_change &gpio3_output_pins_default &periph_pin_enable &periph_pin_reset>;
     ti,gpio-always-on;
     ti,no-reset-on-init;
 
@@ -789,6 +793,11 @@
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart1_pins>;
+
+    bluetooth {
+		compatible = "ti,wl1835-st";
+		enable-gpios = <&gpio1 22 GPIO_ACTIVE_HIGH>;
+	};
 };
 
 &uart4 {
