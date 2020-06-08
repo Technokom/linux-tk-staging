@@ -224,10 +224,6 @@
 };
 
 
-&epwmss2	 {
-	status = "okay";
-};
-
 &gpio0 {
 	status = "okay";
 };
@@ -271,10 +267,6 @@
 	ti,non-removable;
 };
 
-&elm {
-	status = "okay";
-};
-
 
 &uart0 {
 	status = "okay";
@@ -290,10 +282,6 @@
 	status = "okay";
 };
 
-&wkup_m3_ipc {
-	ti,set-io-isolation;
-	ti,scale-data-fw = "am43x-evm-scale-data.bin";
-};
 
 &cpu {
 	cpu0-supply = <&dcdc2>;
