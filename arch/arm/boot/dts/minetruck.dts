@@ -26,6 +26,11 @@
 		display0 = &lcd0;
 	};
 
+	sc_uartclk: mclk_osc {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <16000000>;
+	};
 
 	lcd_bl: backlight {
 		compatible = "pwm-backlight";
@@ -592,7 +597,7 @@
 		compatible = "nxp,sc16is752";
 		reg = <0>;
 		spi-max-frequency = <24000000>;
-		clocks = <&sc_mstrclk>;
+		clocks = <&sc_uartclk>;
 		interrupt-parent = <&gpio4>;
 		interrupts = <7 IRQ_TYPE_EDGE_FALLING>;
 		gpio-controller;
