@@ -30,15 +30,6 @@
 	};
 
 
-	vmmcwl_fixed: fixedregulator-mmcwl {
-		compatible = "regulator-fixed";
-		regulator-name = "vmmcwl_fixed";
-		regulator-min-microvolt = <3300000>;
-		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio1 23 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
-	};
-
 	/* fixed 12MHz oscillator */
 	refclk: oscillator {
 		#clock-cells = <0>;
@@ -161,7 +152,7 @@
 	tps65218: tps65218@24 {
 		reg = <0x24>;
 		compatible = "ti,tps65218";
-		interrupts = <GIC_SPI 7 IRQ_TYPE_NONE>; /* NMIn */
+		interrupts = <GIC_SPI 7 IRQ_TYPE_LEVEL_HIGH>; /* NMIn */
 		interrupt-controller;
 		#interrupt-cells = <2>;
 

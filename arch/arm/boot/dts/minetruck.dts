@@ -20,7 +20,7 @@
 / {
 
 	model = "TK SOM AM437x minetruck";
-	compatible = "technokom,minetruck","ti,am4378","ti,am43";
+	compatible = "technokom,minetruck","ti,am4372","ti,am43";
 
 	aliases {
 		display0 = &lcd0;
@@ -144,6 +144,16 @@
 		};
 	};
 
+    wlan_en_reg: fixedregulator-mmcwl {
+		compatible = "regulator-fixed";
+		regulator-name = "wlan-en-regulator";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		startup-delay-us= <70000>;
+		/* WL_EN */
+		gpio = <&gpio1 23 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+	};
 };
 
 &am43xx_pinmux {
@@ -458,7 +468,7 @@
 
 	wlan_pins_default: pinmux_wlan_pins_default {
 		pinctrl-single,pins = <
-			AM4372_IOPAD(0x868, PIN_INPUT  | WAKEUP_ENABLE | MUX_MODE7 ) /* (G8) gpmc_a10.gpio1[26] */
+			AM4372_IOPAD(0x868, PIN_INPUT_PULLDOWN  | WAKEUP_ENABLE | MUX_MODE7 ) /* (G8) gpmc_a10.gpio1[26] */
 			AM4372_IOPAD(0x85c, PIN_OUTPUT | MUX_MODE7 ) /* (F6) gpmc_a7.gpio1[23] */
 
             AM4372_IOPAD(0x894, PIN_OUTPUT | MUX_MODE7) /* (E10) gpmc_oen_ren.gpio2[3] power wifi global enable*/
@@ -527,21 +537,6 @@
 		sd-amp-gpios    = <&gpio5 13 GPIO_ACTIVE_HIGH>;
         */
 	};
-    bq25892: bq25892@6b {
-        compatible = "ti,bq25892";
-        reg = <0x6b>;
-		interrupt-parent = <&gpio5>;
-		interrupts = <9 IRQ_TYPE_LEVEL_HIGH>;
-        ti,battery-regulation-voltage = <4200000>;
-        ti,charge-current = <500000>;
-        ti,termination-current = <50000>;
-        ti,precharge-current = <128000>;
-        ti,minimum-sys-voltage = <3600000>;
-        ti,boost-voltage = <5000000>;
-        ti,boost-max-current = <1000000>;
-        ti,thermal-regulation-threshold = <120>;
-		system-power-controller;
-    };
 
     ds2482: ds2482@18 {
         compatible = "dallas,ds2482";
@@ -650,14 +645,14 @@
 
 &gpio2 {
 	status = "okay";
-	pinctrl-0 = <&modem_pin_usb_enable /* &gpio2_input_pins_default */>;
+	pinctrl-0 = <&modem_pin_usb_enable>;
+
 	p3 {
 		gpio-hog;
 		gpios = <3 GPIO_ACTIVE_HIGH>;
 		output-high;
-		line-name = "PowerWiFiEnable";
+		line-name = "PowerWiFi";
 	};
-
 };
 
 &gpio3 {
@@ -697,14 +692,16 @@
 	dmas = <&edma_xbar 30 0 1>,
 		<&edma_xbar 31 0 2>;
 	dma-names = "tx", "rx";
-	vmmc-supply = <&vmmcwl_fixed>;
+	vmmc-supply = <&wlan_en_reg>;
 
 	bus-width = <4>;
-	pinctrl-names = "default", "sleep";
+	pinctrl-names = "default";
 	pinctrl-0 = <&mmc2_pins>;
-	pinctrl-1 = <&mmc2_sleep_pins>;
+
+	ti,non-removable;
 	cap-power-off-card;
 	keep-power-in-suspend;
+
 	#address-cells = <1>;
 	#size-cells = <0>;
 
