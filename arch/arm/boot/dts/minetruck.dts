@@ -410,9 +410,9 @@
 	uart1_pins: uart1_pins {
 		pinctrl-single,pins = <
             AM4372_IOPAD(0x9e8, PIN_INPUT | MUX_MODE1) /* (AB20) cam1_data0.uart1_rxd */
-			AM4372_IOPAD(0x9ec, PIN_OUTPUT_PULLDOWN | MUX_MODE1) /* (AC21) cam1_data1.uart1_txd */
-			AM4372_IOPAD(0x9f0, PIN_INPUT_PULLUP | MUX_MODE1) /* (AD21) cam1_data2.uart1_ctsn */
-			AM4372_IOPAD(0x9f4, PIN_OUTPUT_PULLDOWN | MUX_MODE1) /* (AE22) cam1_data3.uart1_rtsn */
+			AM4372_IOPAD(0x9ec, PIN_OUTPUT | MUX_MODE1) /* (AC21) cam1_data1.uart1_txd */
+			AM4372_IOPAD(0x9f0, PIN_INPUT | MUX_MODE1) /* (AD21) cam1_data2.uart1_ctsn */
+			AM4372_IOPAD(0x9f4, PIN_OUTPUT | MUX_MODE1) /* (AE22) cam1_data3.uart1_rtsn */
 
             AM4372_IOPAD(0x858, PIN_OUTPUT | MUX_MODE7) /* (E8) gpmc_a6.gpio1[22] bt enable*/
 		>;
