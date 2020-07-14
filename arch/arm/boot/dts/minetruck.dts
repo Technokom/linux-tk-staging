@@ -309,11 +309,11 @@
 	    >;
     };
 
-    uart3_pins: uart3_pins {
+    uart4_pins: uart4_pins {
         pinctrl-single,pins = <
-            AM4372_IOPAD(0x934, PIN_INPUT_PULLUP | MUX_MODE1 ) /* (C14) mii1_rxd3.uart3_rxd */
-    		AM4372_IOPAD(0x938, PIN_OUTPUT_PULLDOWN | MUX_MODE1 ) /* (E16) mii1_rxd2.uart3_txd */
-            AM4372_IOPAD(0x834,  PIN_OUTPUT_PULLDOWN | MUX_MODE7 ) /* (C11) gpmc_ad13.gpio1[13] */
+            AM4372_IOPAD(0x968, PIN_INPUT_PULLUP | MUX_MODE1) /* (L25) uart0_ctsn.uart4_rxd */
+			AM4372_IOPAD(0x96c, PIN_OUTPUT_PULLDOWN | MUX_MODE1) /* (J25) uart0_rtsn.uart4_txd */
+            AM4372_IOPAD(0x9b8, PIN_OUTPUT_PULLDOWN | MUX_MODE7) /* (AC18) cam0_field.gpio4[2] */
 	    >;
     };
 
@@ -339,15 +339,7 @@
 
             AM4372_IOPAD(0x894, PIN_OUTPUT | MUX_MODE7) /* (E10) gpmc_oen_ren.gpio2[3] power wifi global enable*/
 		>;
-	};
-
-	uart4_pins: uart4_pins {
-		pinctrl-single,pins = <
-			AM4372_IOPAD(0x968, PIN_INPUT_PULLUP | MUX_MODE1 )
-			AM4372_IOPAD(0x96c, PIN_OUTPUT_PULLDOWN | MUX_MODE1 )
-		>;
-	};
-	
+	};	
 
 	mcasp1_pins: mcasp1_pins {
 		pinctrl-single,pins = <
@@ -489,6 +481,12 @@
 
 &gpio2 {
 	status = "okay";
+    p3 {
+		gpio-hog;
+		gpios = <3 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "PowerWiFi";
+	};
 };
 
 &gpio3 {
@@ -630,9 +628,14 @@
 };
 
 &uart4 {
+    compatible = "ti,omap2-uart-legacy";
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart4_pins>;
+    rts-gpio = <&gpio4 2 GPIO_ACTIVE_HIGH>;
+    rs485-rts-active-high;
+    rs485-rts-delay = <0 0>;
+    linux,rs485-enabled-at-boot-time;
 };
 
 &uart2 {
@@ -646,16 +649,6 @@
     linux,rs485-enabled-at-boot-time;
 };
 
-&uart3 {
-    compatible = "ti,omap2-uart-legacy";
-	status = "okay";
-	pinctrl-names = "default";
-	pinctrl-0 = <&uart3_pins>;
-    rts-gpio = <&gpio1 13 GPIO_ACTIVE_HIGH>;
-    rs485-rts-active-high;
-    rs485-rts-delay = <0 0>;
-    linux,rs485-enabled-at-boot-time;
-};
 
 &uart5 {
     compatible = "ti,omap2-uart-legacy";
