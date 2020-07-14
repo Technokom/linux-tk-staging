@@ -44,8 +44,6 @@
 		label = "lcd";
 		
 		pinctrl-names = "default";
-		pinctrl-0 = <&dss_pin_enable>;
-		enable-gpios = <&gpio5 29 GPIO_ACTIVE_HIGH>;
 
 		panel-timing {
 			clock-frequency = <51206400>;
@@ -114,7 +112,7 @@
 
 &am43xx_pinmux {
 	pinctrl-names = "default", "sleep";
-	pinctrl-0 = <&wlan_pins_default &clkout1_pin &pfo_pins_default>;
+	pinctrl-0 = <&wlan_pins_default &pfo_pins_default &gpio_in_plus_pin &gpio_in_minus_pin &gpio_out_pin>;
 
 
 	dcan0_default: dcan0_default_pins {
@@ -131,19 +129,6 @@
 		>;
 	};
 
-	dcan1_default: dcan1_default_pins {
-		pinctrl-single,pins = <
-			AM4372_IOPAD(0x980, PIN_OUTPUT | MUX_MODE2)		/* uart1_rxd.d_can1_tx */
-			AM4372_IOPAD(0x984, PIN_INPUT_PULLUP | MUX_MODE2)	/* uart1_txd.d_can1_rx */
-		>;
-	};
-
-	dcan1_sleep: dcan1_sleep_pins {
-		pinctrl-single,pins = <
-			AM4372_IOPAD(0x980, PIN_INPUT_PULLUP | MUX_MODE7)	/* uart1_rxd.gpio0_14 */
-			AM4372_IOPAD(0x984, PIN_INPUT_PULLUP | MUX_MODE7)	/* uart1_txd.gpio0_15 */
-		>;
-	};
 
     pfo_pins_default: pfo_pins_default {
 		pinctrl-single,pins = <
@@ -164,55 +149,26 @@
         >;
     };
 
-
-    gpio0_input_pins_default: pinmux_gpio0_input_pins_default {
-		pinctrl-single,pins = <
-            AM4372_IOPAD(0x960, PIN_INPUT | MUX_MODE7 ) /* (B23) dss_vsync.gpio2[22] */
-
-		>;
-    };
-
-    gpio4_input_pins_default: pinmux_gpio4_input_pins_default {
-		pinctrl-single,pins = <
-            AM4372_IOPAD(0x9d4, PIN_INPUT | MUX_MODE7 ) /* (AD25) cam1_hd.gpio4[9] */
-		    AM4372_IOPAD(0x9d8, PIN_INPUT | MUX_MODE7 ) /* (AC23) cam1_vd.gpio4[10] */
-		>;
-    };
-
-    gpio4_input_tangenta_default: pinmux_gpio4_input_tangenta_default {
-        pinctrl-single,pins = <
-            AM4372_IOPAD(0x9d0, PIN_INPUT | MUX_MODE7 ) /* (AD25) cam1_hd.gpio4[8] */
+    gpio_in_plus_pin: gpio_in_plus_pin {
+		pinctrl-single,pins = <    
+            AM4372_IOPAD(0xa74, PIN_INPUT | MUX_MODE7) /* (C24) xdma_event_intr1.gpio0[20] */
+            AM4372_IOPAD(0x834, PIN_INPUT | MUX_MODE7) /* (C11) gpmc_ad13.gpio1[13] */
         >;
     };
 
-    gpio0_output_pins_default: pinmux_gpio0_output_pins_default {
-		pinctrl-single,pins = <
-            AM4372_IOPAD(0xa78, PIN_OUTPUT_PULLDOWN | MUX_MODE7 ) /* (H20) clkreq.gpio0[24] */
-		>;
+    gpio_in_minus_pin: gpio_in_minus_pin {
+		pinctrl-single,pins = <    
+            AM4372_IOPAD(0x9d4, PIN_INPUT | MUX_MODE7) /* (AD25) cam1_hd.gpio4[9] */
+			AM4372_IOPAD(0x9d8, PIN_INPUT | MUX_MODE7) /* (AC23) cam1_vd.gpio4[10] */
+        >;
     };
 
-    gpio1_audio_switch_default: gpio1_audio_switch_default {
-		pinctrl-single,pins = <
-            AM4372_IOPAD(0x864, PIN_OUTPUT | MUX_MODE7 ) /* (B4) gpmc_a9.gpio1[25] */
-		>;
+    gpio_out_pin: gpio_out_pin {
+		pinctrl-single,pins = <    
+            AM4372_IOPAD(0x998, PIN_OUTPUT | MUX_MODE7) /* (H23) mcasp0_axr0.gpio3[16] */
+            AM4372_IOPAD(0x840, PIN_OUTPUT | MUX_MODE7) /* (C3) gpmc_a0.gpio1[16] */
+        >;
     };
-
-    gpio3_output_pins_default: pinmux_gpio3_output_pins_default {
-		pinctrl-single,pins = <
-            AM4372_IOPAD(0x998, PIN_OUTPUT_PULLDOWN | MUX_MODE7 ) /* (H23) mcasp0_axr0.gpio3[16] */
-		>;
-    };
-
-
-    gpio5_output_pins_default: pinmux_gpio5_output_pins_default {
-		pinctrl-single,pins = <
-    	    AM4372_IOPAD(0xa30, PIN_OUTPUT_PULLDOWN | MUX_MODE7 ) /* (H22) uart3_ctsn.gpio5[0] */
-		    AM4372_IOPAD(0xa28, PIN_OUTPUT_PULLDOWN | MUX_MODE7 ) /* (H25) uart3_rxd.gpio5[2] */
-			AM4372_IOPAD(0xa2c, PIN_OUTPUT_PULLDOWN | MUX_MODE7 ) /* (H24) uart3_txd.gpio5[3] */
-			AM4372_IOPAD(0xa4c, PIN_OUTPUT_PULLDOWN | MUX_MODE7 ) /* (E24) gpio5_13.gpio5[13] */
-		>;
-    };
-
 
 	i2c1_pins_default: i2c1_pins_default {
 		pinctrl-single,pins = <
@@ -252,18 +208,6 @@
 			AM4372_IOPAD(0x848, PIN_INPUT_PULLDOWN | MUX_MODE7) /* (C6) gpmc_a2.mmc2_dat1 */
 			AM4372_IOPAD(0x84c, PIN_INPUT_PULLDOWN | MUX_MODE7) /* (A4) gpmc_a3.mmc2_dat2 */
 			AM4372_IOPAD(0x878, PIN_INPUT_PULLDOWN | MUX_MODE7) /* (A3) gpmc_be1n.mmc2_dat3 */
-		>;
-	};
-
-	ecap2_pins_default: backlight_pins_default {
-		pinctrl-single,pins = <
-			AM4372_IOPAD(0x99c, PIN_OUTPUT_PULLUP | MUX_MODE4)       /* eCAP2_in_PWM2_out MODE4 */
-		>;
-	};
-
-	ecap2_pins_sleep: backlight_pins_sleep {
-		pinctrl-single,pins = <
-			AM4372_IOPAD(0x99c, MUX_MODE7)
 		>;
 	};
 
@@ -346,15 +290,6 @@
 		>;
 	};
 
-	
-	dss_pin_enable: dss_pin_enable {
-		pinctrl-single,pins = <
-			AM4372_IOPAD(0xa74, PIN_OUTPUT_PULLUP | MUX_MODE9)
-
-		>;
-	};
-
-
 	uart1_pins: uart1_pins {
 		pinctrl-single,pins = <
             AM4372_IOPAD(0x9e8, PIN_INPUT | MUX_MODE1) /* (AB20) cam1_data0.uart1_rxd */
@@ -390,27 +325,10 @@
 	    >;
     };
 
-	modem_pin_usb_enable: modem_pin_usb_enable {
-		pinctrl-single,pins = <
-	        AM4372_IOPAD(0x898, PIN_OUTPUT | MUX_MODE7 ) /* (D10) gpmc_wen.gpio2[4] */
-		>;
-	};
 
 	periph_pin_enable: periph_pin_enable {
 		pinctrl-single,pins = <
 	        AM4372_IOPAD(0xA68, PIN_OUTPUT | MUX_MODE7 )  /* (P20) spi2_d1.gpio3[23] */
-		>;
-	};
-
-	modem_pin_enable: modem_pin_enable {
-		pinctrl-single,pins = <
-			AM4372_IOPAD(0x9dc, PIN_OUTPUT | MUX_MODE7 ) /* (AE21) cam1_pclk.gpio4[11] */
-		>;
-	};
-
-	sim_pin_change: sim_pin_change {
-		pinctrl-single,pins = <
-			AM4372_IOPAD(0xa6c, PIN_OUTPUT | MUX_MODE7 ) 
 		>;
 	};
 
@@ -447,12 +365,6 @@
 			AM4372_IOPAD(0x9a0, PIN_INPUT_PULLDOWN | MUX_MODE7)
 			AM4372_IOPAD(0x9a4, PIN_INPUT_PULLDOWN | MUX_MODE7)
 			AM4372_IOPAD(0x9a8, PIN_INPUT_PULLDOWN | MUX_MODE7)
-		>;
-	};
-
-	clkout1_pin: pinmux_clkout1_pin {
-		pinctrl-single,pins = <
-			AM4372_IOPAD(0xa70, PIN_OUTPUT_PULLDOWN | MUX_MODE3)	/* XDMA_EVENT_INTR0/CLKOUT1 */
 		>;
 	};
 
@@ -565,44 +477,23 @@
 	ti,adc-channels = <0 1 2 3 4 5 6 7>;
 };
 
-&ecap2 {
-	status = "okay";
-	pinctrl-names = "default";
-	pinctrl-0 = <&ecap2_pins_default>;
-};
 
 &gpio0 {
 	status = "okay";
-	pinctrl-0 = <&gpio0_output_pins_default &gpio0_input_pins_default>;
 };
 
 &gpio1 {
 	status = "okay";
-	pinctrl-0 = <&gpio1_audio_switch_default>;
-	p25 {
-		gpio-hog;
-		gpios = <25 GPIO_ACTIVE_HIGH>;
-		output-high;
-		line-name = "AudioSwitch";
-	};
 
 };
 
 &gpio2 {
 	status = "okay";
-	pinctrl-0 = <&modem_pin_usb_enable>;
-
-	p3 {
-		gpio-hog;
-		gpios = <3 GPIO_ACTIVE_HIGH>;
-		output-high;
-		line-name = "PowerWiFi";
-	};
 };
 
 &gpio3 {
 	status = "okay";
-	pinctrl-0 = <&sim_pin_change &gpio3_output_pins_default &periph_pin_enable &periph_pin_reset>;
+	pinctrl-0 = <&periph_pin_enable &periph_pin_reset>;
     ti,gpio-always-on;
     ti,no-reset-on-init;
 
@@ -624,12 +515,10 @@
 
 &gpio4 {
 	status = "okay";
-	pinctrl-0 = <&modem_pin_enable &gpio4_input_pins_default &gpio4_input_tangenta_default>;
 };
 
 &gpio5 {
 	status = "okay";
-	pinctrl-0 = <&gpio5_output_pins_default>;
 };
 
 &mmc3 {
@@ -695,13 +584,6 @@
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&dcan0_default>;
 	pinctrl-1 = <&dcan0_sleep>;
-	status = "okay";
-};
-
-&dcan1 {
-	pinctrl-names = "default", "sleep";
-	pinctrl-0 = <&dcan1_default>;
-	pinctrl-1 = <&dcan1_sleep>;
 	status = "okay";
 };
 
