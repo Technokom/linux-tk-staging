@@ -39,50 +39,6 @@
 		default-brightness-level = <15>;
 	};
 
-	gpio_keys: gpio_keys {
-		compatible = "gpio-keys";
-		pinctrl-names = "default";
-		pinctrl-0 = <&gpio_keys_pins_default>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		button@1 {
-			label = "f19_button";
-			linux,code = <KEY_1>;
-			gpios = <&gpio1 12 GPIO_ACTIVE_LOW>;
-		};
-
-		button@2 {
-			label = "f20_button";
-			linux,code = <KEY_2>;
-			gpios = <&gpio1 21 GPIO_ACTIVE_LOW>;
-		};
-
-		button@3 {
-			label = "f21_button";
-			linux,code = <KEY_3>;
-			gpios = <&gpio1 20 GPIO_ACTIVE_LOW>;
-		};
-
-		button@4 {
-			label = "f22_button";
-			linux,code = <KEY_4>;
-			gpios = <&gpio5 8 GPIO_ACTIVE_LOW>;
-		};
-
-		button@5 {
-			label = "f23_button";
-			linux,code = <KEY_5>;
-			gpios = <&gpio5 11 GPIO_ACTIVE_LOW>;
-		};
-
-		button@6 {
-			label = "f24_button";
-			linux,code = <KEY_6>;
-			gpios = <&gpio0 7 GPIO_ACTIVE_LOW>;
-		};
-	};
-
 	lcd0: display {
 		compatible = "osddisplays,osd057T0559-34ts", "panel-dpi";
 		label = "lcd";
@@ -158,7 +114,7 @@
 
 &am43xx_pinmux {
 	pinctrl-names = "default", "sleep";
-	pinctrl-0 = <&wlan_pins_default &clkout1_pin>;
+	pinctrl-0 = <&wlan_pins_default &clkout1_pin &pfo_pins_default>;
 
 
 	dcan0_default: dcan0_default_pins {
@@ -189,6 +145,19 @@
 		>;
 	};
 
+    pfo_pins_default: pfo_pins_default {
+		pinctrl-single,pins = <
+            AM4372_IOPAD(0xa3c, PIN_INPUT | MUX_MODE7) /* (F24) gpio5_9.gpio5[9] pfo*/
+			AM4372_IOPAD(0x89c, PIN_INPUT | MUX_MODE7) /* (C10) gpmc_be0n_cle.gpio2[5] scap_off */
+		>;
+	};
+
+    rpm_pins_default: rpm_pins_default {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0x9d0, PIN_INPUT_PULLUP | MUX_MODE7) /* (AD24) cam1_data8.gpio4[8] */
+		>;
+	};
+
     gpio_onewire_interrupt_pin: gpio_onewire_interrupt_pin {
 		pinctrl-single,pins = <    
             AM4372_IOPAD(0xA34, PIN_INPUT_PULLUP | MUX_MODE7 ) /* (K24) uart3_rtsn.gpio5[1] */
@@ -196,32 +165,12 @@
     };
 
 
-	gpio_keys_pins_default: gpio_keys_pins_default {
-		pinctrl-single,pins = <
-            AM4372_IOPAD(0x830, PIN_INPUT_PULLUP | MUX_MODE7 ) /* (E11) gpmc_ad12.gpio1[12] */
-		    AM4372_IOPAD(0x850, PIN_INPUT_PULLUP | MUX_MODE7 ) /* (D7) gpmc_a4.gpio1[20] */
-		    AM4372_IOPAD(0x854, PIN_INPUT_PULLUP | MUX_MODE7 ) /* (E7) gpmc_a5.gpio1[21] */
-		    AM4372_IOPAD(0xa38, PIN_INPUT_PULLUP | MUX_MODE7 ) /* (D25) gpio5_8.gpio5[8] */
-		    AM4372_IOPAD(0xa44, PIN_INPUT_PULLUP | MUX_MODE7 ) /* (F23) gpio5_11.gpio5[11] */
-			AM4372_IOPAD(0x964, PIN_INPUT_PULLUP | MUX_MODE7 ) /* (G24) eCAP0_in_PWM0_out.gpio0[7] */
-		>;
-	};
-
     gpio0_input_pins_default: pinmux_gpio0_input_pins_default {
 		pinctrl-single,pins = <
             AM4372_IOPAD(0x960, PIN_INPUT | MUX_MODE7 ) /* (B23) dss_vsync.gpio2[22] */
 
 		>;
     };
-
-/*
-    gpio2_input_pins_default: pinmux_gpio2_input_pins_default {
-		pinctrl-single,pins = <
-            AM4372_IOPAD(0x8e0, PIN_INPUT | MUX_MODE7 )
-		    AM4372_IOPAD(0x8e4, PIN_INPUT | MUX_MODE7 )
-		>;
-    };
-*/
 
     gpio4_input_pins_default: pinmux_gpio4_input_pins_default {
 		pinctrl-single,pins = <
@@ -269,7 +218,6 @@
 		pinctrl-single,pins = <
 			AM4372_IOPAD(0xa40, PIN_INPUT_PULLUP | SLEWCTRL_FAST | MUX_MODE1)  /* (G20) gpio5_10.I2C1_SCL */
 			AM4372_IOPAD(0xa48, PIN_INPUT_PULLUP | SLEWCTRL_FAST | MUX_MODE1)  /* (E25) gpio5_12.I2C1_SDA */
-            AM4372_IOPAD(0xa3c, PIN_INPUT_PULLUP | MUX_MODE7 ) /* (F24) gpio5_9.gpio5[9]  pin interrup bq25892*/
 		>;
 	};
 
@@ -607,17 +555,14 @@
 &tscadc {
 	status = "okay";
 
-	tsc {
-		ti,wires = <4>;
-		ti,x-plate-resistance = <760>;
-		ti,coordinate-readouts = <5>;
-		ti,wire-config = <0x00 0x11 0x22 0x33>;
-		ti,charge-delay = <0x400>;
-	};
-
 	adc {
-		ti,adc-channels = <4 5 6 7>;
+		ti,adc-channels = <0 1 2 3 4 5 6 7>;
 	};
+};
+
+&adc1 {
+	status = "okay";
+	ti,adc-channels = <0 1 2 3 4 5 6 7>;
 };
 
 &ecap2 {

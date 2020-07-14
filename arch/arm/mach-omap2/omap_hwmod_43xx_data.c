@@ -434,6 +434,33 @@ static struct omap_hwmod am43xx_adc_tsc_hwmod = {
 	},
 };
 
+static struct omap_hwmod_class_sysconfig am437x_adc1_sysc = {
+	.rev_offs   = 0x00,
+	.sysc_offs  = 0x10,
+	.sysc_flags = SYSC_HAS_SIDLEMODE,
+	.idlemodes  = (SIDLE_FORCE | SIDLE_NO | SIDLE_SMART |
+				   SIDLE_SMART_WKUP),
+	.sysc_fields = &omap_hwmod_sysc_type2,
+};
+
+static struct omap_hwmod_class am437x_adc1_hwmod_class = {
+	.name = "adc1",
+	.sysc = &am437x_adc1_sysc,
+};
+
+static struct omap_hwmod am437x_adc1_hwmod = {
+	.name       = "adc1",
+	.class      = &am437x_adc1_hwmod_class,
+	.clkdm_name = "l3s_clkdm",
+	.main_clk   = "l3s_gclk",
+	.prcm       = {
+		.omap4  = {
+			.clkctrl_offs   = AM43XX_CM_PER_ADC1_CDOFFS,
+			.modulemode = MODULEMODE_SWCTRL,
+		},
+	},
+};
+
 static struct omap_hwmod_class_sysconfig am43xx_des_sysc = {
 	.rev_offs	= 0x30,
 	.sysc_offs	= 0x34,
@@ -640,6 +667,13 @@ static struct omap_hwmod_ocp_if am43xx_l4_wkup__smartreflex1 = {
 	.slave		= &am33xx_smartreflex1_hwmod,
 	.clk		= "sys_clkin_ck",
 	.user		= OCP_USER_MPU,
+};
+
+static struct omap_hwmod_ocp_if am437x_l3_s__adc1 = {
+	.master     = &am33xx_l4_wkup_hwmod,
+	.slave      = &am437x_adc1_hwmod,
+	.clk        = "l3s_gclk",
+	.user       = OCP_USER_MPU,
 };
 
 static struct omap_hwmod_ocp_if am43xx_l4_wkup__control = {
@@ -932,6 +966,7 @@ static struct omap_hwmod_ocp_if *am43xx_hwmod_ocp_ifs[] __initdata = {
 	&am43xx_l4_wkup__gpio0,
 	&am43xx_l4_wkup__wd_timer1,
 	&am43xx_l4_wkup__adc_tsc,
+    &am437x_l3_s__adc1,
 	&am43xx_l3_s__qspi,
 	&am33xx_l4_per__dcan0,
 	&am33xx_l4_per__dcan1,
