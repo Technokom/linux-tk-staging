@@ -29,11 +29,9 @@
 
 	wlan_en_reg: fixedregulator-mmcwl {
 		compatible = "regulator-fixed";
-		regulator-name = "wlan-en-regulator";
-		regulator-min-microvolt = <1800000>;
-		regulator-max-microvolt = <1800000>;
-		startup-delay-us= <70000>;
-		/* WL_EN */
+		regulator-name = "vmmcwl_fixed";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
 		gpio = <&gpio1 23 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
@@ -285,6 +283,17 @@
 			AM4372_IOPAD(0x848, PIN_INPUT_PULLUP | MUX_MODE3 ) /* (C6) gpmc_a2.mmc2_dat1 */
 			AM4372_IOPAD(0x84c, PIN_INPUT_PULLUP | MUX_MODE3 ) /* (A4) gpmc_a3.mmc2_dat2 */
 			AM4372_IOPAD(0x878, PIN_INPUT_PULLUP | MUX_MODE3 ) /* (A3) gpmc_be1n.mmc2_dat3 */
+		>;
+	};
+
+	mmc2_sleep_pins: pinmux_mmc2_sleep_pins {
+		pinctrl-single,pins = <
+			AM4372_IOPAD(0x88c, PIN_INPUT_PULLDOWN | MUX_MODE7) /* (A12) gpmc_clk.mmc2_clk */
+			AM4372_IOPAD(0x888, PIN_INPUT_PULLDOWN | MUX_MODE7) /* (B12) gpmc_csn3.mmc2_cmd */
+			AM4372_IOPAD(0x844, PIN_INPUT_PULLDOWN | MUX_MODE7) /* (C5) gpmc_a1.mmc2_dat0 */
+			AM4372_IOPAD(0x848, PIN_INPUT_PULLDOWN | MUX_MODE7) /* (C6) gpmc_a2.mmc2_dat1 */
+			AM4372_IOPAD(0x84c, PIN_INPUT_PULLDOWN | MUX_MODE7) /* (A4) gpmc_a3.mmc2_dat2 */
+			AM4372_IOPAD(0x878, PIN_INPUT_PULLDOWN | MUX_MODE7) /* (A3) gpmc_be1n.mmc2_dat3 */
 		>;
 	};
 
@@ -668,9 +677,9 @@
 	vmmc-supply = <&wlan_en_reg>;
 
 	bus-width = <4>;
-	pinctrl-names = "default";
+	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&mmc2_pins>;
-
+	pinctrl-1 = <&mmc2_sleep_pins>;
 	cap-power-off-card;
 	keep-power-in-suspend;
 	non-removable;
