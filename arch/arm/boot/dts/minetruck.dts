@@ -32,12 +32,6 @@
 		clock-frequency = <16000000>;
 	};
 
-	lcd_bl: backlight {
-		compatible = "pwm-backlight";
-		pwms = <&ecap2 0 50000 0>;
-		brightness-levels = <0 10 20 30 40 50 60 70 80 90 100 124 155 186 217 255>;
-		default-brightness-level = <15>;
-	};
 
 	lcd0: display {
 		compatible = "osddisplays,osd057T0559-34ts", "panel-dpi";
@@ -158,15 +152,15 @@
 
     gpio_in_minus_pin: gpio_in_minus_pin {
 		pinctrl-single,pins = <    
-            AM4372_IOPAD(0x9d4, PIN_INPUT | MUX_MODE7) /* (AD25) cam1_hd.gpio4[9] */
-			AM4372_IOPAD(0x9d8, PIN_INPUT | MUX_MODE7) /* (AC23) cam1_vd.gpio4[10] */
+            AM4372_IOPAD(0x9d4, PIN_INPUT_PULLUP | MUX_MODE7) /* (AD25) cam1_hd.gpio4[9] */
+			AM4372_IOPAD(0x9d8, PIN_INPUT_PULLUP | MUX_MODE7) /* (AC23) cam1_vd.gpio4[10] */
         >;
     };
 
     gpio_out_pin: gpio_out_pin {
 		pinctrl-single,pins = <    
-            AM4372_IOPAD(0x998, PIN_OUTPUT | MUX_MODE7) /* (H23) mcasp0_axr0.gpio3[16] */
-            AM4372_IOPAD(0x840, PIN_OUTPUT | MUX_MODE7) /* (C3) gpmc_a0.gpio1[16] */
+            AM4372_IOPAD(0x998, PIN_OUTPUT | SLEWCTRL_FAST | MUX_MODE7) /* (H23) mcasp0_axr0.gpio3[16] */
+            AM4372_IOPAD(0x840, PIN_OUTPUT | SLEWCTRL_FAST | MUX_MODE7) /* (C3) gpmc_a0.gpio1[16] */
         >;
     };
 
@@ -492,8 +486,6 @@
 &gpio3 {
 	status = "okay";
 	pinctrl-0 = <&periph_pin_enable &periph_pin_reset>;
-    ti,gpio-always-on;
-    ti,no-reset-on-init;
 
 	p15 {
 		gpio-hog;
