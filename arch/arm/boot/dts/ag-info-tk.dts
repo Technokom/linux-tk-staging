@@ -229,6 +229,7 @@
         >;
     };
 
+
     gpio0_output_pins_default: pinmux_gpio0_output_pins_default {
 		pinctrl-single,pins = <
             AM4372_IOPAD(0xa78, PIN_OUTPUT_PULLDOWN | MUX_MODE7 ) /* (H20) clkreq.gpio0[24] */
@@ -458,6 +459,7 @@
 		pinctrl-single,pins = <
 			AM4372_IOPAD(0x968, PIN_INPUT_PULLUP | MUX_MODE1 )
 			AM4372_IOPAD(0x96c, PIN_OUTPUT_PULLDOWN | MUX_MODE1 )
+    	    AM4372_IOPAD(0xa04, PIN_OUTPUT | MUX_MODE7) /* (AE24) cam1_data7.gpio4[21] gps power*/
 		>;
 	};
 	
