@@ -508,6 +508,12 @@
 	pinctrl-0 = <&i2c1_pins_default &gpio_onewire_interrupt_pin>;
 	clock-frequency = <400000>;
 
+    eepromboard: eepromboard@57 {
+        compatible = "atmel,24c01";
+        reg = <0x57>;
+        read-only;
+        pagesize = <8>;
+    };
 
 	lm49350: lm49350@1a {
 		#sound-dai-cells = <0>;
