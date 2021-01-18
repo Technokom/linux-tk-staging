@@ -530,7 +530,7 @@
         reg = <0x6b>;
 		interrupt-parent = <&gpio5>;
 		interrupts = <9 IRQ_TYPE_LEVEL_HIGH>;
-        ti,battery-regulation-voltage = <4200000>;
+        ti,battery-regulation-voltage = <4000000>;
         ti,charge-current = <500000>;
         ti,termination-current = <50000>;
         ti,precharge-current = <128000>;
