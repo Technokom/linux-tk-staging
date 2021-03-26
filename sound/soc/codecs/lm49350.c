@@ -347,27 +347,26 @@ static int lm49350_init(struct snd_soc_codec *codec)
 
 	
 	snd_soc_write(codec, PLL_CLK_SEL, 0x00);     // input clock to PLL2 - MCLK
-  	snd_soc_write(codec, PLL2_M, 9);        // PLL2_M = 5
-  	snd_soc_write(codec, PLL2_N, 32); // PLL2_N = 32
+    snd_soc_write(codec, PLL2_M, 0x18); //snd_soc_write(codec, PLL2_M, 9);        // PLL2_M = 5
+    snd_soc_write(codec, PLL2_N, 0x93); //snd_soc_write(codec, PLL2_N, 32); // PLL2_N = 32
   	snd_soc_write(codec, PLL2_N_MOD, 0x00);     // PLL2_N_MOD = 0
-  	snd_soc_write(codec, PLL2_P, 49);       // PLL2_P = 25
+    snd_soc_write(codec, PLL2_P, 0x2C); //snd_soc_write(codec, PLL2_P, 49);       // PLL2_P = 25
     // Fout = 6144 kHz
 
-	snd_soc_write(codec, DAC_BASIC, 0x41);//DAC settings OSR 128, clock source PLL2
-  	snd_soc_write(codec, DAC_CLOCK, 5);//2048 KHz
+    snd_soc_write(codec, DAC_BASIC, 0x43); //snd_soc_write(codec, DAC_BASIC, 0x41);//DAC settings OSR 128, clock source PLL2
+  	snd_soc_write(codec, DAC_CLOCK, 5); //2048 KHz
 
-    snd_soc_write(codec, 0x20, 0x40);//snd_soc_write(codec, 0x20, 0x43);//ADC settings, stereo, OSR 128, clock source PLL2
+    snd_soc_write(codec, 0x20, 0x40);//ADC settings, stereo, OSR 128, clock source PLL2
   	snd_soc_write(codec, 0x21, 5);   //2048 kHz
 
 	snd_soc_write(codec, 0x42, 0x1);
   	snd_soc_write(codec, 0x43, 0x05);
-    snd_soc_write(codec, 0x44, 0x11); //snd_soc_write(codec, 0x44, 0x09);
+    snd_soc_write(codec, 0x44, 0x11);
   	snd_soc_write(codec, 0x45, 0x10);
 
-	snd_soc_write(codec, 0x50, 0x1F);//WriteAIC(0x50, 0x1B);
-	snd_soc_write(codec, 0x51, 5);
-	//snd_soc_write(codec, 0x51, 25);
-	snd_soc_write(codec, 0x52, 0x0A);
+	snd_soc_write(codec, 0x50, 0x1F);
+    snd_soc_write(codec, 0x51, 0x0F); //snd_soc_write(codec, 0x51, 5);
+    snd_soc_write(codec, 0x52, 0x00); //snd_soc_write(codec, 0x52, 0x0A);
 	snd_soc_write(codec, 0x53, 0x02);
 	snd_soc_write(codec, 0x54, 0x1B);
 	snd_soc_write(codec, 0x55, 0x02);
