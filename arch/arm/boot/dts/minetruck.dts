@@ -32,7 +32,6 @@
 		clock-frequency = <16000000>;
 	};
 
-
 	lcd0: display {
 		compatible = "osddisplays,osd057T0559-34ts", "panel-dpi";
 		label = "lcd";
@@ -94,9 +93,9 @@
 
     wlan_en_reg: fixedregulator-mmcwl {
 		compatible = "regulator-fixed";
-		regulator-name = "wlan-en-regulator";
-		regulator-min-microvolt = <1800000>;
-		regulator-max-microvolt = <1800000>;
+		regulator-name = "vmmcwl_fixed";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
 		startup-delay-us= <70000>;
 		/* WL_EN */
 		gpio = <&gpio1 23 GPIO_ACTIVE_HIGH>;
@@ -486,6 +485,8 @@
 &gpio3 {
 	status = "okay";
 	pinctrl-0 = <&periph_pin_enable &periph_pin_reset>;
+    ti,gpio-always-on;
+    ti,no-reset-on-init;
 
 	p15 {
 		gpio-hog;
@@ -521,8 +522,9 @@
 	bus-width = <4>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&mmc2_pins>;
+    pinctrl-1 = <&mmc2_sleep_pins>;
 
-	ti,non-removable;
+    ti,non-removable;
 	cap-power-off-card;
 	keep-power-in-suspend;
 
