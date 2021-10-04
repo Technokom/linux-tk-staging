@@ -610,6 +610,11 @@
 	};
 };
 
+&adc1 {
+    status = "okay";
+    ti,adc-channels = <0 1 2 3 4 5 6 7>;
+};
+
 &ecap2 {
 	status = "okay";
 	pinctrl-names = "default";
