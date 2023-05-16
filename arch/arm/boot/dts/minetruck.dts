@@ -634,17 +634,6 @@
 	};
 };
 
-&uart4 {
-    compatible = "ti,omap2-uart-legacy";
-	status = "okay";
-	pinctrl-names = "default";
-	pinctrl-0 = <&uart4_pins>;
-    rts-gpio = <&gpio4 2 GPIO_ACTIVE_HIGH>;
-    rs485-rts-active-high;
-    rs485-rts-delay = <0 0>;
-    linux,rs485-enabled-at-boot-time;
-};
-
 &uart2 {
     compatible = "ti,omap2-uart-legacy";
 	status = "okay";
@@ -656,6 +645,27 @@
     linux,rs485-enabled-at-boot-time;
 };
 
+&uart3 {
+    compatible = "ti,omap2-uart-legacy";
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart3_pins>;
+    rts-gpio = <&gpio4 2 GPIO_ACTIVE_HIGH>;
+    rs485-rts-active-high;
+    rs485-rts-delay = <0 0>;
+    linux,rs485-enabled-at-boot-time;
+};
+
+&uart4 {
+    compatible = "ti,omap2-uart-legacy";
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart4_pins>;
+    rts-gpio = <&gpio1 12 GPIO_ACTIVE_HIGH>;
+    rs485-rts-active-high;
+    rs485-rts-delay = <0 0>;
+    linux,rs485-enabled-at-boot-time;
+};
 
 &uart5 {
     compatible = "ti,omap2-uart-legacy";
